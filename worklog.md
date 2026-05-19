@@ -63,3 +63,30 @@ Stage Summary:
 - 17 files changed, 130 insertions, 48 deletions
 - All 6 Phase 1 tasks completed
 - Pushed to GitHub: https://github.com/skaba89/arpt_app.git
+---
+Task ID: Phase 2 — High Priority Fixes
+Agent: Main Agent
+Task: Implement Phase 2 high priority corrections from QA audit
+
+Work Log:
+- Created backend/src/utils/sanitize.ts: sanitizeString() strips HTML tags, JS event handlers, javascript: URLs, data: URLs
+- Created backend/src/middleware/sanitize.ts: Auto-sanitizes req.body on all POST/PUT/PATCH/DELETE
+- Applied sanitizeMiddleware globally in backend/src/index.ts after body parsing
+- Converted User.role from String to Prisma enum 'Role' in both schemas (backend + frontend)
+- Added 'enum Role { dg, agent, operateur, public }' to enforce valid roles at DB level
+- Regenerated Prisma clients for both services
+- Deleted dead src/app/proxy.ts file (competing middleware never used)
+- Replaced 13 direct fetch() calls in guichet-view.tsx with fetchAPI() for consistent 401 retry
+- Hardened CORS: strict origin whitelist, reject unknown origins with warning log, added maxAge
+- Removed /api/debug/ from rate limit exempt routes in frontend middleware
+- Added doitChangerMotDePasse Boolean field to User model (default: true)
+- Updated login response to include doitChangerMotDePasse flag
+- Updated session endpoint to include doitChangerMotDePasse flag
+- Updated change-password to clear doitChangerMotDePasse flag
+- Backend TypeScript compiles clean, frontend source files compile clean
+- Committed and pushed: b9333ff
+
+Stage Summary:
+- 10 files changed, 181 insertions, 159 deletions
+- 6 Phase 2 tasks completed
+- Pushed to GitHub
