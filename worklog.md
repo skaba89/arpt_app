@@ -183,3 +183,33 @@ Stage Summary:
 - 81 total tests passing (was 62 before, added 19 new tests)
 - Coverage includes: security module (9 tests), MFA module (3 tests), structured logger (4 tests), hierarchical RBAC (10 new tests), domain services (11 tests)
 
+---
+Task ID: Phase 1 Hardening (Continued)
+Agent: Main Agent
+Task: Complete Phase 1 security hardening based on global evolution audit
+
+Work Log:
+- Created src/lib/rbac-config.ts as single source of truth for ROLE_PERMISSIONS, roleHierarchy, getInheritedPermissions, hasPermission, VALID_ROLES, ALL_PERMISSIONS, Role type
+- Updated src/lib/jwt-auth.ts to import and re-export from rbac-config (eliminates duplication)
+- Updated src/lib/rbac-client.ts to import from rbac-config (eliminates client/server duplication risk)
+- Fixed IDOR in /api/notifications: users can no longer query other users' notifications unless they have notifications:write permission
+- Added route-level RBAC checks (hasPermission) for POST/PUT on ALL resource routes: operators, qos, complaints, sanctions, audits, decisions, users, dashboard, import
+- Replaced manual role checks (role !== "admin") with hasPermission() calls in users and audit-logs routes
+- Fixed MFA enumeration risk: login now uses temporary challenge token (crypto.randomBytes, 5min TTL) instead of exposing userId in MFA-required response
+- Added TOTP rate limiting: 5 attempts per 5 minutes per IP, separate from login rate limit
+- Added TOTP code format validation (/^\d{6}$/) in login route
+- Updated auth-provider.tsx: loginWithMfa now takes only totpCode (uses stored mfaToken), added periodic session validation (5min interval), simplified API
+- Updated login/page.tsx to use new loginWithMfa(totpCode) signature
+- Replaced ALL console.error calls with structured logger.error across 13+ API route files
+- Fixed Edge Runtime incompatibility: moved JWT blacklist check from middleware to getAuthFromRequest() in api-auth.ts
+- Added output: "standalone" to next.config.ts for Docker deployment
+- Updated GitHub Actions CI/CD with Redis service container, proper job dependencies, Docker validation
+- Added 4 new test files: rbac-config.test.ts (44 tests), api-auth.test.ts (12 tests), audit-log.test.ts (21 tests), mfa-security.test.ts (20 tests)
+- Committed all changes (commit 044a8bc): 44 files changed, 3478 insertions(+), 494 deletions(-)
+
+Stage Summary:
+- 178 total tests passing (was 81, +97 new tests)
+- All Phase 1 critical items resolved: IDOR, RBAC unification, route-level auth, MFA security, structured logging, CI/CD
+- Build passes successfully (Next.js 16.2.6)
+- Security scores improved: RBAC coverage 100%, route-level checks on all mutations, MFA flow secured against enumeration
+- Git push requires authentication token (commit ready in local repo)
