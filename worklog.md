@@ -213,3 +213,43 @@ Stage Summary:
 - Build passes successfully (Next.js 16.2.6)
 - Security scores improved: RBAC coverage 100%, route-level checks on all mutations, MFA flow secured against enumeration
 - Git push requires authentication token (commit ready in local repo)
+---
+Task ID: Phase 1 Hardening Round 2
+Agent: Main Agent
+Task: Additional security hardening — CSRF, MFA Redis, security headers, password management
+
+Work Log:
+- Fixed /api/auth/me: Added JWT blacklist check before verifying token — prevents revoked tokens from being used
+- Added Content-Security-Policy header to middleware (strict CSP with frame-ancestors 'none', form-action 'self', base-uri 'self')
+- Added Permissions-Policy header (camera=(), microphone=(), geolocation=())
+- Added Strict-Transport-Security header (HSTS, max-age=63072000, includeSubDomains, preload) for production only
+- Blocked /api/auth/dev-credentials route at middleware level — returns 404 even in development (defense-in-depth)
+- Replaced remaining console.error calls with structured logger.error in security.ts and audit-log.ts
+- Created src/lib/csrf.ts: Full CSRF protection module with generateCsrfToken, validateCsrfToken, setCsrfCookie, checkCsrfProtection
+  - Uses double-submit cookie pattern bound to session token (hash(token + session) stored as cookie, raw token sent as x-csrf-token header)
+  - Graceful degradation: if no CSRF cookie is set, requests are allowed (for API-only clients)
+  - timingSafeEqual comparison prevents timing attacks
+- Added CSRF validation in middleware for state-changing methods (POST, PUT, DELETE, PATCH) on authenticated API routes
+- Updated login route: Sets CSRF cookie on successful login, returns raw CSRF token in response body for client-side storage
+- Updated auth-provider.tsx: Stores CSRF token in sessionStorage after login, provides fetchWithCsrf() helper that adds x-csrf-token header
+- Updated logout route: Clears both arpt-session and arpt-csrf cookies
+- Created /api/auth/change-password route: Self-service password change with current password verification, complexity requirements (8+ chars, uppercase, lowercase, digit), audit logging
+- Created /api/auth/reset-password route: Admin-only password reset with session revocation (blacklists all user tokens), critical severity audit logging
+- Created /api/auth/session-cleanup route: Periodic purge of expired and revoked sessions (expired immediately, revoked after 7 days for audit)
+- Moved MFA challenge storage from in-memory Map to Redis (storeMfaChallenge/consumeMfaChallenge in security.ts)
+  - Automatic 5-minute TTL via Redis EX
+  - Atomic get-and-delete prevents replay attacks
+  - On TOTP failure, challenge is re-stored for retry within the window
+  - Enables multi-instance deployment support
+- TypeScript compilation passes with zero errors
+- All 178 tests pass (15 test files)
+- Next.js production build succeeds
+
+Stage Summary:
+- 8 files modified, 4 new files created
+- Security headers: CSP, HSTS, Permissions-Policy, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy
+- CSRF protection with double-submit cookie pattern bound to session
+- Password self-service and admin reset with session revocation
+- MFA challenges moved to Redis for multi-instance support
+- Dev credentials route blocked at middleware level
+- Session cleanup endpoint for periodic maintenance
