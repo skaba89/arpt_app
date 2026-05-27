@@ -1,0 +1,11 @@
+title,description,category,priority,status,operatorCode,complainantName,complainantPhone,complainantEmail
+Qualite d'appel degradee,Appels coupes frequemment a Conakry depuis 2 semaines,qos,high,open,ORG,Mamadou Diallo,+224 622 111 222,mamadou.diallo@email.gn
+Couverture reseau insuffisante,Aucun signal dans le quartier Hamdallaye depuis 1 mois,coverage,high,open,MTN,Fatou Balde,+224 623 111 222,fatou.balde@email.gn
+Facturation abusive,Prelevements injustifies sur le compte mobile money,billing,high,in_progress,ORG,Ibrahima Soumah,+224 622 333 444,ibrahima.soumah@email.gn
+Internet tres lent,Debit internet inferieur a 1 Mbps a Kankan,internet,medium,open,CEL,Amara Toure,+224 624 111 222,amara.toure@email.gn
+SMS non recus,Messages SMS non delivres depuis 3 jours,sms,medium,in_progress,MTN,Mariama Camara,+224 623 333 444,mariama.camara@email.gn
+Service client inaccessible,Attente superieure a 30 minutes pour joindre le service client,service,medium,open,ORG,Ousmane Sylla,+224 622 555 666,ousmane.sylla@email.gn
+Coupure internet prolongee,Panne internet de 48 heures dans la region de Labe,internet,high,resolved,CEL,Kadiatou Bah,+224 624 333 444,kadiatou.bah@email.gn
+Non respect des tarifs,Tarifs appliques differents de ceux publies par l'operateur,billing,medium,open,MTN,Lamine Conde,+224 623 555 666,lamine.conde@email.gn
+Appels internationaux coupes,Communications internationales interrompues apres 2 minutes,qos,high,open,ORG,Aissatou Dioubate,+224 622 777 888,aissatou.dioubate@email.gn
+Donnees mobiles non fonctionnelles,Forfait data achete mais aucun acces internet,data,high,in_progress,CEL,Mohamed Keita,+224 624 555 666,mohamed.keita@email.gn

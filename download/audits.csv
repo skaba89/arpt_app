@@ -1,0 +1,8 @@
+title,description,type,status,operatorCode,startDate,endDate,findings,recommendations
+Audit technique Orange,Audit des infrastructures reseau d'Orange Guinee,technical,in_progress,ORG,2025-03-01,2025-04-30,Insuffisance des equipements en zone rurale,Augmenter la capacite des stations de base
+Audit conformite MTN,Verification du respect des specifications techniques,conformite,planned,MTN,2025-06-01,2025-07-31,,Planifier les visites sur site
+Audit financier Celcom,Controle des revenus et taxes reglementaires,financier,completed,CEL,2025-01-15,2025-03-15,Ecarts constates dans les declarations fiscales,Regulariser les paiements dans les 30 jours
+Audit qualite Guinee Telecom,Evaluation de la qualite du service fixe,qualite,planned,GNT,2025-07-01,2025-08-31,,Collecter les donnees QoS prealablement
+Audit securite Orange,Inspection de la securite des donnees abonnes,securite,in_progress,ORG,2025-04-15,2025-05-30,Politique de securite incomplete,Mettre en place une politique RGPD conforme
+Audit technique MTN,Mesures de couverture et de qualite du reseau,technical,planned,MTN,2025-08-01,2025-09-30,,Preparer les outils de mesure
+Audit procedes Celcom,Verification des procedes de facturation,procedes,completed,CEL,2024-11-01,2025-01-15,Facturation non conforme sur 3 services,Rembourser les abonnes et corriger le systeme

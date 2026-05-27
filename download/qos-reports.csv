@@ -1,0 +1,16 @@
+operatorCode,period,region,callSuccessRate,callSetupTime,dropRate,handoverSuccessRate,smsSuccessRate,dataThroughput,latency,overallScore,status,comments
+ORG,2025-Q1,Conakry,96.2,3.1,1.8,98.5,99.1,25.3,28,93.7,approved,Excellente qualite de service
+ORG,2025-Q1,Kindia,91.5,4.2,3.2,95.0,97.5,18.2,35,85.3,submitted,Bonne qualite globale
+ORG,2025-Q1,Kankan,88.0,5.5,5.1,90.2,94.8,12.5,42,76.9,draft,Qualite en dessous des seuils
+MTN,2025-Q1,Conakry,94.8,3.5,2.4,97.2,98.8,22.1,30,90.1,approved,Bonne performance
+MTN,2025-Q1,Nzerekore,82.3,6.8,7.2,85.5,91.0,8.5,55,68.4,submitted,Problemes de couverture
+MTN,2025-Q1,Labe,85.6,5.9,5.8,88.7,93.2,11.0,48,73.5,draft,Ameliorations necessaires
+CEL,2025-Q1,Conakry,89.5,4.8,4.5,92.8,96.0,15.8,38,80.2,submitted,Performance acceptable
+CEL,2025-Q1,Kankan,78.2,8.1,9.5,80.3,87.5,6.2,65,58.7,draft,Non conforme aux seuils
+CEL,2025-Q1,Kindia,83.4,6.5,6.8,86.0,90.5,9.8,52,70.1,draft,Zone rurale deficitaire
+ORG,2024-Q4,Conakry,95.8,3.3,2.0,98.0,98.9,24.0,29,92.5,approved,Performance stable
+MTN,2024-Q4,Conakry,93.5,3.8,3.0,96.5,98.2,20.5,32,88.0,approved,Bonne qualite
+CEL,2024-Q4,Conakry,87.2,5.2,5.5,91.0,95.0,14.0,40,77.8,submitted,Legerement sous les seuils
+GNT,2025-Q1,Conakry,75.5,9.2,12.0,70.5,82.0,4.5,80,52.3,draft,Reseau fixe degrade
+ORG,2025-Q2,Conakry,97.1,2.8,1.5,99.0,99.5,28.5,25,95.8,submitted,Amerlioration continue
+MTN,2025-Q2,Conakry,95.5,3.2,2.0,97.8,99.0,24.0,28,91.5,submitted,Tres bonne qualite

@@ -1,0 +1,9 @@
+title,description,type,amount,operatorCode,status,decisionDate,executionDate
+Avertissement QoS Orange,Non respect des seuils de qualite de service Q1 2025,avertissement,0,ORG,confirmed,2025-03-15,
+Sanction financiere Celcom,Amende pour non conformite QoS region de Kankan,amende,50000000,CEL,executed,2025-03-20,2025-04-01
+Mise en demeure MTN,Delai accorde pour ameliorer la couverture Nzerekore,mise_en_demeure,0,MTN,confirmed,2025-04-01,
+Avertissement service client Orange,Temps d'attente excessif au service client,avertissement,0,ORG,proposed,,
+Suspension partielle Intercel,Non paiement des taxes reglementaires,suspension,0,INT,confirmed,2025-04-10,2025-05-01
+Amende tarifaire MTN,Pratiques tarifaires non conformes aux decisions ARPT,amende,75000000,MTN,proposed,,
+Avertissement couverture Celcom,Couverture inferieure aux engagements de licence,avertissement,0,CEL,proposed,,
+Sanction financiere Orange,Non respect des delais de resolution des plaintes,amende,30000000,ORG,confirmed,2025-05-01,

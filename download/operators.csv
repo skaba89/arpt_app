@@ -1,0 +1,9 @@
+name,code,type,status,contactEmail,contactPhone
+Orange Guinee,ORG,mobile,active,contact@orange.gn,+224 622 000 000
+MTN Guinee,MTN,mobile,active,contact@mtn.gn,+224 623 000 000
+Celcom Guinee,CEL,mobile,active,contact@celcom.gn,+224 624 000 000
+Guinee Telecom,GNT,fixed,active,contact@guineetelecom.gn,+224 625 000 000
+Mobiline Guinee,MOB,mobile,inactive,contact@mobiline.gn,+224 626 000 000
+Intercel Guinee,INT,mobile,active,contact@intercel.gn,+224 627 000 000
+Areeba Guinee,ARE,mobile,suspended,contact@areeba.gn,+224 628 000 000
+Satcon Guinee,SAT,satellite,active,contact@satcon.gn,+224 629 000 000

@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.env.local
+*.log
+coverage/
+test-results/
+playwright-report/
+arpt-app/
+arpt-app/
+arpt-app/

@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  password     String
+  role         String   @default("agent")
+  service      String?
+  twoFactorSecret String?
+  twoFactorEnabled Boolean @default(false)
+  active       Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  operators         Operator[]
+  qosReportsCreated QosReport[]      @relation("QosCreatedBy")
+  qosReportsReviewed QosReport[]     @relation("QosReviewedBy")
+  complaintsCreated Complaint[]      @relation("ComplaintCreatedBy")
+  complaintsAssigned Complaint[]     @relation("ComplaintAssignedTo")
+  auditsCreated     Audit[]          @relation("AuditCreatedBy")
+  auditsLead        Audit[]          @relation("AuditLeadAuditor")
+  sanctions         Sanction[]
+  decisionsCreated  Decision[]       @relation("DecisionCreatedBy")
+  decisionsDecided  Decision[]       @relation("DecisionDecidedBy")
+}
+
+model Operator {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  type        String   @default("mobile")
+  status      String   @default("active")
+  licenseDate DateTime?
+  contactEmail String?
+  contactPhone String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  qosReports  QosReport[]
+  complaints  Complaint[]
+  sanctions   Sanction[]
+  audits      Audit[]
+}
+
+model QosReport {
+  id           String   @id @default(cuid())
+  operatorId   String
+  operator     Operator @relation(fields: [operatorId], references: [id])
+  period       String
+  region       String?
+  callSuccessRate     Float?
+  callSetupTime       Float?
+  dropRate            Float?
+  handoverSuccessRate Float?
+  smsSuccessRate      Float?
+  dataThroughput      Float?
+  latency             Float?
+  overallScore        Float?
+  status       String   @default("draft")
+  reviewedById String?
+  reviewedBy   User?    @relation("QosReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  comments     String?
+  createdById  String?
+  createdBy    User?    @relation("QosCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Complaint {
+  id          String   @id @default(cuid())
+  reference   String   @unique
+  title       String
+  description String
+  category    String
+  priority    String   @default("medium")
+  status      String   @default("open")
+  operatorId  String?
+  operator    Operator? @relation(fields: [operatorId], references: [id])
+  complainantName  String?
+  complainantPhone String?
+  complainantEmail String?
+  assignedToId String?
+  assignedTo   User?    @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id])
+  resolution  String?
+  resolvedAt  DateTime?
+  createdById String?
+  createdBy   User?    @relation("ComplaintCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Sanction {
+  id          String   @id @default(cuid())
+  reference   String   @unique
+  title       String
+  description String
+  type        String
+  amount      Float?
+  operatorId  String
+  operator    Operator @relation(fields: [operatorId], references: [id])
+  status      String   @default("proposed")
+  decisionDate DateTime?
+  executionDate DateTime?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Audit {
+  id          String   @id @default(cuid())
+  reference   String   @unique
+  title       String
+  description String
+  type        String
+  status      String   @default("planned")
+  startDate   DateTime?
+  endDate     DateTime?
+  operatorId  String?
+  operator    Operator? @relation(fields: [operatorId], references: [id])
+  leadAuditorId String?
+  leadAuditor  User?    @relation("AuditLeadAuditor", fields: [leadAuditorId], references: [id])
+  findings    String?
+  recommendations String?
+  createdById String?
+  createdBy   User?    @relation("AuditCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Decision {
+  id          String   @id @default(cuid())
+  reference   String   @unique
+  title       String
+  description String
+  type        String
+  status      String   @default("draft")
+  decidedById String?
+  decidedBy   User?    @relation("DecisionDecidedBy", fields: [decidedById], references: [id])
+  decidedAt   DateTime?
+  publishedAt DateTime?
+  createdById String?
+  createdBy   User?    @relation("DecisionCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  title       String
+  message     String
+  type        String   @default("info")
+  category    String?
+  read        Boolean  @default(false)
+  userId      String?
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  entity      String
+  entityId    String?
+  details     String?
+  userId      String?
+  userName    String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
