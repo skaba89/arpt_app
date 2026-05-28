@@ -1,10 +1,11 @@
 node_modules/
 .next/
+.env
 .env.local
+.env.production
 *.log
 coverage/
 test-results/
 playwright-report/
 arpt-app/
-arpt-app/
-arpt-app/
+db/custom.db
