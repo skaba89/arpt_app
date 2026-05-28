@@ -129,6 +129,76 @@ export const paginationSchema = z.object({
   search: z.string().optional(),
 });
 
+// ── Appel d'Offre ─────────────────────────────────────────────
+export const appelOffreCreateSchema = z.object({
+  reference: z.string().min(1, 'Référence requise').max(50),
+  title: z.string().min(1, 'Titre requis').max(500),
+  description: z.string().max(5000).optional(),
+  type: z.enum(['audit', 'consultation', 'service']).default('audit'),
+  status: z.enum(['draft', 'published', 'closed', 'awarded', 'cancelled']).default('draft'),
+  budget: z.number().positive().optional(),
+  currency: z.string().max(10).default('GNF'),
+  startDate: z.string().optional(),
+  deadlineDate: z.string().optional(),
+  awardedDate: z.string().optional(),
+  awardedToId: z.string().optional(),
+  locality: z.string().max(500).optional(),
+  durationDays: z.number().int().positive().optional(),
+})
+
+// ── FAI ────────────────────────────────────────────────────────
+export const faiCreateSchema = z.object({
+  name: z.string().min(1, 'Nom requis').max(200),
+  code: z.string().min(2, 'Code requis (min 2 caractères)').max(10),
+  type: z.enum(['fixe', 'wifi', 'satellite', 'fibre']).default('fixe'),
+  status: z.enum(['active', 'inactive', 'pending']).default('active'),
+  contactEmail: z.string().email().optional().or(z.literal('')),
+  contactPhone: z.string().max(50).optional(),
+  website: z.string().url().optional().or(z.literal('')),
+  licenseDate: z.string().optional(),
+  avgDownloadSpeed: z.number().positive().optional(),
+  avgUploadSpeed: z.number().positive().optional(),
+  avgLatency: z.number().positive().optional(),
+  subscriberCount: z.number().int().positive().optional(),
+  coverageZones: z.number().int().positive().optional(),
+})
+
+export const faiUpdateSchema = faiCreateSchema.partial().omit({ code: true })
+
+// ── QoS Threshold ─────────────────────────────────────────────
+export const thresholdCreateSchema = z.object({
+  name: z.string().min(1, 'Nom requis').max(200),
+  code: z.string().min(1, 'Code requis').max(50),
+  category: z.enum(['voix', 'sms', 'data', 'internet_fixe', 'couverture']),
+  technology: z.enum(['2G', '3G', '4G', 'fixe']),
+  metric: z.string().min(1, 'Métrique requise').max(200),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  unit: z.string().max(20).optional(),
+  isRegulatory: z.boolean().default(false),
+  source: z.string().max(100).optional(),
+  description: z.string().max(1000).optional(),
+  active: z.boolean().default(true),
+})
+
+export const thresholdUpdateSchema = thresholdCreateSchema.partial().omit({ code: true })
+
+// ── Conformity Check ──────────────────────────────────────────
+export const conformityCheckCreateSchema = z.object({
+  operatorId: z.string().optional(),
+  faiId: z.string().optional(),
+  thresholdId: z.string().min(1, 'Seuil requis'),
+  measuredValue: z.number({ required_error: 'Valeur mesurée requise' }),
+  isConform: z.boolean({ required_error: 'Conformité requise' }),
+  period: z.string().min(1, 'Période requise').max(20),
+  region: z.string().max(200).optional(),
+  source: z.enum(['drive_test', 'fixed_test', 'operator_report']).optional(),
+  notes: z.string().max(2000).optional(),
+}).refine(
+  (data) => data.operatorId || data.faiId,
+  { message: 'Opérateur ou FAI requis', path: ['operatorId'] }
+)
+
 // ── Types déduits ─────────────────────────────────────────────
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateOperatorInput = z.infer<typeof createOperatorSchema>;

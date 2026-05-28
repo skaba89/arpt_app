@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, GeoJSON as GeoJSONComponent, useMap } from 'react-leaflet'
+import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,6 +27,7 @@ import {
   Users,
   Eye,
   EyeOff,
+  MapPin,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -58,17 +60,41 @@ export interface RegionData {
   operators?: RegionOperatorData[]
 }
 
-type MapView = 'regions' | 'operators' | 'coverage'
+interface LocalityData {
+  id: string
+  name: string
+  region: string
+  prefecture?: string
+  type: 'urbain' | 'periurbain' | 'rural' | 'axe_routier'
+  population?: number
+  hasMobile2G?: boolean
+  hasMobile3G?: boolean
+  hasMobile4G?: boolean
+  hasFixedInternet?: boolean
+  latitude?: number
+  longitude?: number
+}
+
+type MapView = 'regions' | 'operators' | 'coverage' | 'localities'
 type CoverageType = '4G' | '3G' | '2G'
+
+type GeoJsonFeatureCollection = {
+  type: string
+  features: {
+    type: string
+    properties: { name: string; code: string; capital: string }
+    geometry: { type: string; coordinates: number[][][] }
+  }[]
+}
 
 // ── Constants ─────────────────────────────────────────────────
 
 const OPERATOR_COLORS: Record<string, string> = {
-  ORG: '#FF7900', // Orange
-  MTN: '#FFCC00', // MTN yellow
-  CEL: '#00AAFF', // Celcom blue
-  GNT: '#444444', // Guinetel gray
-  GTC: '#00A651', // Guinea Telecom green
+  ORG: '#FF7900',
+  MTN: '#FFCC00',
+  CEL: '#00AAFF',
+  GNT: '#444444',
+  GTC: '#00A651',
 }
 
 const OPERATOR_NAMES: Record<string, string> = {
@@ -77,6 +103,20 @@ const OPERATOR_NAMES: Record<string, string> = {
   CEL: 'Celcom Guinée',
   GTC: 'Guinée Telecom',
   GNT: 'Guinetel',
+}
+
+const LOCALITY_COLORS: Record<string, string> = {
+  urbain: '#3b82f6',
+  periurbain: '#eab308',
+  rural: '#22c55e',
+  axe_routier: '#f97316',
+}
+
+const LOCALITY_LABELS: Record<string, string> = {
+  urbain: 'Urbain',
+  periurbain: 'Péri-urbain',
+  rural: 'Rural',
+  axe_routier: 'Axe routier',
 }
 
 const FALLBACK_REGIONS: RegionData[] = [
@@ -164,12 +204,76 @@ function formatNumber(n: number | null | undefined): string {
   return new Intl.NumberFormat('fr-FR').format(n)
 }
 
-// Offsets for multiple operator circles at same location
+function getQosChoroplethFill(score: number): string {
+  if (score >= 80) return '#22c55e'
+  if (score >= 70) return '#65d36e'
+  if (score >= 60) return '#eab308'
+  if (score >= 50) return '#f59e0b'
+  return '#ef4444'
+}
+
+function getQosChoroplethOpacity(score: number): number {
+  return 0.35 + (score / 100) * 0.35
+}
+
+function getCoverageChoroplethFill(coverage: number): string {
+  if (coverage >= 80) return '#22c55e'
+  if (coverage >= 60) return '#65d36e'
+  if (coverage >= 50) return '#eab308'
+  if (coverage >= 35) return '#f59e0b'
+  return '#ef4444'
+}
+
 function getOperatorOffset(index: number, total: number): [number, number] {
   if (total === 1) return [0, 0]
   const angle = (2 * Math.PI * index) / total - Math.PI / 2
   const radius = 0.15
   return [Math.cos(angle) * radius, Math.sin(angle) * radius]
+}
+
+// Compute a region's feature style based on view mode
+function computeFeatureStyle(
+  code: string,
+  region: RegionData | undefined,
+  mapView: MapView,
+  coverageKey: keyof RegionOperatorData,
+  isSelected: boolean,
+  isHovered: boolean
+): L.PathOptions {
+  if (mapView === 'operators' || mapView === 'localities') {
+    return {
+      color: isSelected ? '#1e3a5f' : '#94a3b8',
+      weight: isSelected ? 2.5 : 1,
+      fillColor: '#e2e8f0',
+      fillOpacity: isHovered ? 0.3 : 0.15,
+      dashArray: isSelected ? undefined : '3 3',
+    }
+  }
+
+  if (mapView === 'coverage') {
+    const ops = region?.operators ?? []
+    const vals = ops.map((o) => o[coverageKey] as number | null).filter((v): v is number => v != null)
+    const avgCov = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+    const fill = getCoverageChoroplethFill(avgCov)
+    const opacity = 0.35 + (avgCov / 100) * 0.35
+    return {
+      color: isSelected ? '#1e3a5f' : isHovered ? '#475569' : '#64748b',
+      weight: isSelected ? 3 : isHovered ? 2 : 1.5,
+      fillColor: fill,
+      fillOpacity: isSelected ? Math.min(opacity + 0.15, 0.8) : isHovered ? Math.min(opacity + 0.1, 0.75) : opacity,
+    }
+  }
+
+  // Default: regions QoS choropleth
+  const qosScore = region?.qosScore ?? 0
+  const fill = getQosChoroplethFill(qosScore)
+  const opacity = getQosChoroplethOpacity(qosScore)
+  return {
+    color: isSelected ? '#1e3a5f' : isHovered ? '#475569' : '#64748b',
+    weight: isSelected ? 3 : isHovered ? 2.5 : 1.5,
+    fillColor: fill,
+    fillOpacity: isSelected ? Math.min(opacity + 0.15, 0.8) : isHovered ? Math.min(opacity + 0.1, 0.75) : opacity,
+  }
 }
 
 // ── Map Resize Handler ────────────────────────────────────────
@@ -209,7 +313,6 @@ function RegionPopupContent({ region }: { region: RegionData }) {
         {region.name}
       </h3>
       <div className="space-y-2 text-sm">
-        {/* QoS + Coverage Summary */}
         <div className="flex justify-between items-center">
           <span className="text-gray-600">Score QoS</span>
           <Badge style={{ backgroundColor: getQosColor(region.qosScore), color: 'white', fontSize: '11px' }}>
@@ -229,7 +332,6 @@ function RegionPopupContent({ region }: { region: RegionData }) {
           <span className="font-semibold text-orange-600">{region.complaintCount}</span>
         </div>
 
-        {/* Operators breakdown */}
         {ops.length > 0 && (
           <div className="mt-2 pt-2 border-t">
             <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Opérateurs présents</p>
@@ -287,11 +389,8 @@ function OperatorLegend({ visibleOps, onToggleOp }: { visibleOps: Set<string>; o
         {allOpCodes.map((code) => {
           const isVisible = visibleOps.has(code)
           return (
-            <button
-              key={code}
-              onClick={() => onToggleOp(code)}
-              className="flex items-center gap-2 w-full text-left hover:bg-muted/50 rounded px-1 py-0.5 transition-colors"
-            >
+            <button key={code} onClick={() => onToggleOp(code)}
+              className="flex items-center gap-2 w-full text-left hover:bg-muted/50 rounded px-1 py-0.5 transition-colors">
               <div className="w-3 h-3 rounded-full shrink-0 border border-gray-300"
                 style={{ backgroundColor: isVisible ? OPERATOR_COLORS[code] : '#e5e7eb', opacity: isVisible ? 1 : 0.4 }} />
               <span className={`text-xs ${isVisible ? 'text-gray-700' : 'text-gray-400'}`}>
@@ -306,7 +405,7 @@ function OperatorLegend({ visibleOps, onToggleOp }: { visibleOps: Set<string>; o
   )
 }
 
-// ── QoS Legend ────────────────────────────────────────────────
+// ── QoS Legend (Choropleth) ──────────────────────────────────
 
 function QosLegend() {
   return (
@@ -314,20 +413,28 @@ function QosLegend() {
       <h4 className="text-xs font-semibold text-gray-700 mb-2">Légende QoS</h4>
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#22c55e', opacity: 0.7 }} />
           <span className="text-xs text-gray-600">Bon (&gt;80%)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
-          <span className="text-xs text-gray-600">Moyen (60-80%)</span>
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#65d36e', opacity: 0.6 }} />
+          <span className="text-xs text-gray-600">Assez bon (70-80%)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
-          <span className="text-xs text-gray-600">Faible (&lt;60%)</span>
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#eab308', opacity: 0.55 }} />
+          <span className="text-xs text-gray-600">Moyen (60-70%)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#f59e0b', opacity: 0.5 }} />
+          <span className="text-xs text-gray-600">Faible (50-60%)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#ef4444', opacity: 0.45 }} />
+          <span className="text-xs text-gray-600">Critique (&lt;50%)</span>
         </div>
       </div>
       <div className="mt-2 pt-2 border-t">
-        <p className="text-[10px] text-gray-500">Taille = nombre de plaintes</p>
+        <p className="text-[10px] text-gray-500">Cliquez sur une région pour détails</p>
       </div>
     </div>
   )
@@ -341,19 +448,159 @@ function CoverageLegend() {
       <h4 className="text-xs font-semibold text-gray-700 mb-2">Légende Couverture</h4>
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#22c55e', opacity: 0.7 }} />
           <span className="text-xs text-gray-600">Élevée (&gt;80%)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
-          <span className="text-xs text-gray-600">Moyenne (50-80%)</span>
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#65d36e', opacity: 0.6 }} />
+          <span className="text-xs text-gray-600">Bonne (60-80%)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
-          <span className="text-xs text-gray-600">Faible (&lt;50%)</span>
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#eab308', opacity: 0.55 }} />
+          <span className="text-xs text-gray-600">Moyenne (50-60%)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#f59e0b', opacity: 0.5 }} />
+          <span className="text-xs text-gray-600">Faible (35-50%)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: '#ef4444', opacity: 0.45 }} />
+          <span className="text-xs text-gray-600">Très faible (&lt;35%)</span>
         </div>
       </div>
     </div>
+  )
+}
+
+// ── Localities Legend ─────────────────────────────────────────
+
+function LocalitiesLegend() {
+  return (
+    <div className="absolute bottom-4 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-3 border">
+      <h4 className="text-xs font-semibold text-gray-700 mb-2">Types de Localités</h4>
+      <div className="space-y-1.5">
+        {Object.entries(LOCALITY_LABELS).map(([key, label]) => (
+          <div key={key} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: LOCALITY_COLORS[key] }} />
+            <span className="text-xs text-gray-600">{label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 pt-2 border-t">
+        <p className="text-[10px] text-gray-500">Cliquez pour voir les détails</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Region GeoJSON Layer (uses ref to update styles efficiently) ──
+
+interface RegionGeoJsonLayerProps {
+  geoJsonData: GeoJsonFeatureCollection
+  regions: RegionData[]
+  mapView: MapView
+  coverageKey: keyof RegionOperatorData
+  selectedRegion: RegionData | null
+  hoveredRegion: string | null
+  onSelectRegion: (region: RegionData) => void
+  onHoverRegion: (code: string | null) => void
+}
+
+function RegionGeoJsonLayer({
+  geoJsonData,
+  regions,
+  mapView,
+  coverageKey,
+  selectedRegion,
+  hoveredRegion,
+  onSelectRegion,
+  onHoverRegion,
+}: RegionGeoJsonLayerProps) {
+  const geoJsonRef = useRef<L.GeoJSON | null>(null)
+  const regionMap = useMemo(() => {
+    const m = new Map<string, RegionData>()
+    regions.forEach((r) => m.set(r.code, r))
+    return m
+  }, [regions])
+
+  // Update styles when dependencies change, without remounting
+  useEffect(() => {
+    if (!geoJsonRef.current) return
+    const layer = geoJsonRef.current
+    layer.eachLayer((l) => {
+      if (l instanceof L.Path) {
+        const feature = (l as L.GeoJSON).feature
+        const code = feature?.properties?.code as string
+        const region = regionMap.get(code)
+        const isSelected = selectedRegion?.code === code
+        const isHovered = hoveredRegion === code
+        const style = computeFeatureStyle(code, region, mapView, coverageKey, isSelected, isHovered)
+        l.setStyle(style)
+      }
+    })
+  }, [regionMap, mapView, coverageKey, selectedRegion, hoveredRegion])
+
+  const styleFn = useCallback(
+    (feature: { properties?: { code?: string } }): L.PathOptions => {
+      const code = feature.properties?.code as string
+      const region = regionMap.get(code)
+      const isSelected = selectedRegion?.code === code
+      const isHovered = hoveredRegion === code
+      return computeFeatureStyle(code, region, mapView, coverageKey, isSelected, isHovered)
+    },
+    [regionMap, mapView, coverageKey, selectedRegion, hoveredRegion]
+  )
+
+  const onEachFeature = useCallback(
+    (feature: { properties?: { code?: string; name?: string } }, layer: L.Layer) => {
+      const code = feature.properties?.code as string
+      const region = regionMap.get(code)
+
+      layer.on({
+        mouseover: () => {
+          onHoverRegion(code)
+          if (layer instanceof L.Path) layer.bringToFront()
+        },
+        mouseout: () => onHoverRegion(null),
+        click: () => {
+          if (region) onSelectRegion(region)
+        },
+      })
+
+      if (region) {
+        const tooltipContent = mapView === 'coverage'
+          ? `<div style="font-family:system-ui;min-width:120px">
+              <strong style="color:#1e3a5f;font-size:13px">${region.name}</strong><br/>
+              <span style="font-size:11px;color:#666">Couverture: </span>
+              <strong style="font-size:11px;color:${getCoverageColor(region.coverage)}">${region.coverage}%</strong><br/>
+              <span style="font-size:10px;color:#888">${region.activeOperators} opérateur(s)</span>
+            </div>`
+          : `<div style="font-family:system-ui;min-width:120px">
+              <strong style="color:#1e3a5f;font-size:13px">${region.name}</strong><br/>
+              <span style="font-size:11px;color:#666">QoS: </span>
+              <strong style="font-size:11px;color:${getQosColor(region.qosScore)}">${region.qosScore.toFixed(1)}%</strong><br/>
+              <span style="font-size:10px;color:#888">${region.activeOperators} opérateur(s) · ${region.coverage}% couverture</span>
+            </div>`
+
+        layer.bindTooltip(tooltipContent, {
+          sticky: true,
+          className: 'region-tooltip',
+          direction: 'top',
+          offset: [0, -10],
+        })
+      }
+    },
+    [regionMap, mapView, onSelectRegion, onHoverRegion]
+  )
+
+  return (
+    <GeoJSONComponent
+      key={`geo-${mapView}`}
+      ref={geoJsonRef}
+      data={geoJsonData as unknown as GeoJSON.GeoJsonObject}
+      style={styleFn}
+      onEachFeature={onEachFeature}
+    />
   )
 }
 
@@ -366,7 +613,6 @@ function RegionDetailPanel({ region }: { region: RegionData }) {
 
   return (
     <div className="space-y-4">
-      {/* Region Overview */}
       <Card className="border-[#1e3a5f] border-2">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -406,7 +652,6 @@ function RegionDetailPanel({ region }: { region: RegionData }) {
         </CardContent>
       </Card>
 
-      {/* Operator Breakdown Table */}
       {ops.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -431,13 +676,11 @@ function RegionDetailPanel({ region }: { region: RegionData }) {
                         </Badge>
                       )}
                     </div>
-                    {/* Coverage bars */}
                     <div className="space-y-1">
                       <MiniCoverageBar value={op.coverage2G} color={color} label="2G" />
                       <MiniCoverageBar value={op.coverage3G} color={color} label="3G" />
                       <MiniCoverageBar value={op.coverage4G} color={color} label="4G" />
                     </div>
-                    {/* Stats row */}
                     <div className="flex gap-3 mt-1.5 text-[10px] text-gray-500">
                       {op.subscriberCount != null && (
                         <span className="flex items-center gap-0.5"><Users className="w-2.5 h-2.5" />{formatNumber(op.subscriberCount)} abonnés</span>
@@ -454,7 +697,6 @@ function RegionDetailPanel({ region }: { region: RegionData }) {
         </Card>
       )}
 
-      {/* Coverage Comparison Chart */}
       {ops.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -465,63 +707,32 @@ function RegionDetailPanel({ region }: { region: RegionData }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2.5">
-              {/* 4G Comparison */}
-              <div>
-                <p className="text-[10px] font-semibold text-gray-500 mb-1">4G</p>
-                {ops.map((op) => {
-                  const val = op.coverage4G ?? 0
-                  return (
-                    <div key={`4g-${op.operatorId}`} className="flex items-center gap-1.5 mb-0.5">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
-                      <span className="text-[10px] w-8 text-gray-500 truncate">{op.operatorCode}</span>
-                      <div className="flex-1 bg-muted rounded-full h-2">
-                        <div className="h-2 rounded-full transition-all" style={{ width: `${val}%`, backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
-                      </div>
-                      <span className="text-[10px] font-medium w-8 text-right">{val}%</span>
-                    </div>
-                  )
-                })}
-              </div>
-              {/* 3G Comparison */}
-              <div>
-                <p className="text-[10px] font-semibold text-gray-500 mb-1">3G</p>
-                {ops.map((op) => {
-                  const val = op.coverage3G ?? 0
-                  return (
-                    <div key={`3g-${op.operatorId}`} className="flex items-center gap-1.5 mb-0.5">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
-                      <span className="text-[10px] w-8 text-gray-500 truncate">{op.operatorCode}</span>
-                      <div className="flex-1 bg-muted rounded-full h-2">
-                        <div className="h-2 rounded-full transition-all" style={{ width: `${val}%`, backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
-                      </div>
-                      <span className="text-[10px] font-medium w-8 text-right">{val}%</span>
-                    </div>
-                  )
-                })}
-              </div>
-              {/* 2G Comparison */}
-              <div>
-                <p className="text-[10px] font-semibold text-gray-500 mb-1">2G</p>
-                {ops.map((op) => {
-                  const val = op.coverage2G ?? 0
-                  return (
-                    <div key={`2g-${op.operatorId}`} className="flex items-center gap-1.5 mb-0.5">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
-                      <span className="text-[10px] w-8 text-gray-500 truncate">{op.operatorCode}</span>
-                      <div className="flex-1 bg-muted rounded-full h-2">
-                        <div className="h-2 rounded-full transition-all" style={{ width: `${val}%`, backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
-                      </div>
-                      <span className="text-[10px] font-medium w-8 text-right">{val}%</span>
-                    </div>
-                  )
-                })}
-              </div>
+              {(['4G', '3G', '2G'] as const).map((tech) => {
+                const key = `coverage${tech}` as keyof RegionOperatorData
+                return (
+                  <div key={tech}>
+                    <p className="text-[10px] font-semibold text-gray-500 mb-1">{tech}</p>
+                    {ops.map((op) => {
+                      const val = (op[key] as number) ?? 0
+                      return (
+                        <div key={`${tech}-${op.operatorId}`} className="flex items-center gap-1.5 mb-0.5">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
+                          <span className="text-[10px] w-8 text-gray-500 truncate">{op.operatorCode}</span>
+                          <div className="flex-1 bg-muted rounded-full h-2">
+                            <div className="h-2 rounded-full transition-all" style={{ width: `${val}%`, backgroundColor: OPERATOR_COLORS[op.operatorCode] ?? '#888' }} />
+                          </div>
+                          <span className="text-[10px] font-medium w-8 text-right">{val}%</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Network Infrastructure Summary */}
       {ops.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -540,7 +751,6 @@ function RegionDetailPanel({ region }: { region: RegionData }) {
                 <span className="text-xs text-muted-foreground">Total abonnés</span>
                 <span className="text-sm font-bold">{formatNumber(totalSubs)}</span>
               </div>
-              {/* Sites per operator */}
               <div className="mt-2 pt-2 border-t">
                 <p className="text-[10px] text-gray-500 mb-1">Sites par opérateur</p>
                 {ops.map((op) => (
@@ -578,15 +788,46 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
   const [mapView, setMapView] = useState<MapView>('regions')
   const [coverageType, setCoverageType] = useState<CoverageType>('4G')
   const [visibleOperators, setVisibleOperators] = useState<Set<string>>(new Set(Object.keys(OPERATOR_COLORS)))
+  const [geoJsonData, setGeoJsonData] = useState<GeoJsonFeatureCollection | null>(null)
+  const [localities, setLocalities] = useState<LocalityData[]>([])
+  const [geoJsonLoading, setGeoJsonLoading] = useState(true)
+  const localitiesFetched = useRef(false)
+
+  // Fetch GeoJSON data
+  useEffect(() => {
+    fetch('/data/guinea-regions.geojson')
+      .then((res) => res.json())
+      .then((data: GeoJsonFeatureCollection) => {
+        setGeoJsonData(data)
+        setGeoJsonLoading(false)
+      })
+      .catch((err) => {
+        console.error('Failed to load GeoJSON:', err)
+        setGeoJsonLoading(false)
+      })
+  }, [])
+
+  // Fetch localities
+  useEffect(() => {
+    if (localitiesFetched.current) return
+    localitiesFetched.current = true
+    fetch('/api/localities?limit=100')
+      .then((res) => res.json())
+      .then((data: { localities?: LocalityData[] }) => {
+        if (data.localities && Array.isArray(data.localities)) {
+          setLocalities(data.localities)
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load localities:', err)
+      })
+  }, [])
 
   const toggleOperator = (code: string) => {
     setVisibleOperators((prev) => {
       const next = new Set(prev)
-      if (next.has(code)) {
-        next.delete(code)
-      } else {
-        next.add(code)
-      }
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
       return next
     })
   }
@@ -601,8 +842,12 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
   const avgQos = regions.reduce((sum, r) => sum + r.qosScore, 0) / regions.length
   const avgCoverage = regions.reduce((sum, r) => sum + r.coverage, 0) / regions.length
 
-  // Compute coverage key for scaling in coverage view
   const coverageKey: keyof RegionOperatorData = coverageType === '4G' ? 'coverage4G' : coverageType === '3G' ? 'coverage3G' : 'coverage2G'
+
+  const localitiesWithCoords = useMemo(
+    () => localities.filter((loc) => loc.latitude != null && loc.longitude != null),
+    [localities]
+  )
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full">
@@ -623,6 +868,10 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
               <TabsTrigger value="coverage" className="text-xs px-3">
                 <Radio className="w-3.5 h-3.5 mr-1" />
                 Couverture
+              </TabsTrigger>
+              <TabsTrigger value="localities" className="text-xs px-3">
+                <MapPin className="w-3.5 h-3.5 mr-1" />
+                Localités
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -657,23 +906,33 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* ── Vue Régions ─────────────────────── */}
-          {mapView === 'regions' && regions.map((region) => {
-            const color = getQosColor(region.qosScore)
-            const isSelected = selectedRegion?.code === region.code
-            const isHovered = hoveredRegion === region.code
-            const radius = Math.max(12, Math.min(30, region.complaintCount * 2.5 + 10))
+          {/* ── GeoJSON Region Polygons ─────────────── */}
+          {geoJsonData && !geoJsonLoading && (
+            <RegionGeoJsonLayer
+              geoJsonData={geoJsonData}
+              regions={regions}
+              mapView={mapView}
+              coverageKey={coverageKey}
+              selectedRegion={selectedRegion}
+              hoveredRegion={hoveredRegion}
+              onSelectRegion={onSelectRegion}
+              onHoverRegion={setHoveredRegion}
+            />
+          )}
 
+          {/* ── Vue Régions: Region center markers ───── */}
+          {mapView === 'regions' && regions.map((region) => {
+            const isSelected = selectedRegion?.code === region.code
             return (
               <CircleMarker
-                key={region.code}
+                key={`center-${region.code}`}
                 center={[region.lat, region.lng]}
-                radius={isSelected ? radius + 5 : isHovered ? radius + 3 : radius}
+                radius={isSelected ? 6 : 4}
                 pathOptions={{
-                  color: isSelected ? '#1e3a5f' : color,
-                  fillColor: color,
-                  fillOpacity: isSelected ? 0.7 : isHovered ? 0.6 : 0.45,
-                  weight: isSelected ? 3 : 2,
+                  color: '#1e3a5f',
+                  fillColor: isSelected ? '#1e3a5f' : '#ffffff',
+                  fillOpacity: isSelected ? 0.9 : 0.8,
+                  weight: isSelected ? 2.5 : 1.5,
                 }}
                 eventHandlers={{
                   click: () => onSelectRegion(region),
@@ -761,26 +1020,23 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
             )
           })}
 
-          {/* ── Vue Couverture ─────────────────── */}
+          {/* ── Vue Couverture: Region center markers ── */}
           {mapView === 'coverage' && regions.map((region) => {
             const ops = region.operators ?? []
-            // Average coverage of the selected type across operators
             const coverageValues = ops.map((o) => o[coverageKey] as number | null).filter((v): v is number => v != null)
             const avgCov = coverageValues.length > 0 ? coverageValues.reduce((a, b) => a + b, 0) / coverageValues.length : 0
             const color = getCoverageColor(avgCov)
             const isSelected = selectedRegion?.code === region.code
-            const isHovered = hoveredRegion === region.code
-            const radius = Math.max(12, Math.min(35, avgCov * 0.35 + 8))
 
             return (
               <CircleMarker
-                key={`cov-${region.code}`}
+                key={`cov-center-${region.code}`}
                 center={[region.lat, region.lng]}
-                radius={isSelected ? radius + 5 : isHovered ? radius + 3 : radius}
+                radius={isSelected ? 7 : 5}
                 pathOptions={{
                   color: isSelected ? '#1e3a5f' : color,
-                  fillColor: color,
-                  fillOpacity: isSelected ? 0.7 : isHovered ? 0.6 : 0.45,
+                  fillColor: '#fff',
+                  fillOpacity: 0.9,
                   weight: isSelected ? 3 : 2,
                 }}
                 eventHandlers={{
@@ -834,6 +1090,68 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
               </CircleMarker>
             )
           })}
+
+          {/* ── Vue Localités ─────────────────── */}
+          {mapView === 'localities' && localitiesWithCoords.map((loc) => {
+            const color = LOCALITY_COLORS[loc.type] ?? '#94a3b8'
+            return (
+              <CircleMarker
+                key={`loc-${loc.id}`}
+                center={[loc.latitude!, loc.longitude!]}
+                radius={5}
+                pathOptions={{
+                  color: '#fff',
+                  fillColor: color,
+                  fillOpacity: 0.75,
+                  weight: 1.5,
+                }}
+              >
+                <Popup>
+                  <div className="p-1 min-w-[180px] max-w-[240px]">
+                    <h3 className="font-bold text-sm mb-1" style={{ color: '#1e3a5f' }}>
+                      {loc.name}
+                    </h3>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Type</span>
+                        <Badge style={{ backgroundColor: color, color: 'white', fontSize: '10px' }}>
+                          {LOCALITY_LABELS[loc.type] ?? loc.type}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Région</span>
+                        <span className="font-semibold text-xs">{loc.region}</span>
+                      </div>
+                      {loc.prefecture && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">Préfecture</span>
+                          <span className="font-semibold text-xs">{loc.prefecture}</span>
+                        </div>
+                      )}
+                      {loc.population != null && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">Population</span>
+                          <span className="font-semibold text-xs">{formatNumber(loc.population)}</span>
+                        </div>
+                      )}
+                      <div className="mt-1 pt-1 border-t space-y-0.5">
+                        <p className="text-[10px] font-semibold text-gray-500">Couverture disponible</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {loc.hasMobile2G && <Badge variant="outline" className="text-[9px] px-1.5 py-0">2G</Badge>}
+                          {loc.hasMobile3G && <Badge variant="outline" className="text-[9px] px-1.5 py-0">3G</Badge>}
+                          {loc.hasMobile4G && <Badge variant="outline" className="text-[9px] px-1.5 py-0">4G</Badge>}
+                          {loc.hasFixedInternet && <Badge variant="outline" className="text-[9px] px-1.5 py-0">Internet fixe</Badge>}
+                          {!loc.hasMobile2G && !loc.hasMobile3G && !loc.hasMobile4G && !loc.hasFixedInternet && (
+                            <span className="text-[10px] text-gray-400">Aucune couverture</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            )
+          })}
         </MapContainer>
 
         {/* Legends (outside MapContainer, positioned absolutely) */}
@@ -842,6 +1160,7 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
           <OperatorLegend visibleOps={visibleOperators} onToggleOp={toggleOperator} />
         )}
         {mapView === 'coverage' && <CoverageLegend />}
+        {mapView === 'localities' && <LocalitiesLegend />}
       </div>
 
       {/* Sidebar Panel */}
@@ -887,6 +1206,15 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
                 {avgCoverage.toFixed(1)}%
               </span>
             </div>
+            {mapView === 'localities' && (
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Localités</span>
+                </div>
+                <span className="text-sm font-bold">{localities.length}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -908,10 +1236,8 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
                     <span className="text-xs font-semibold">{region.activeOperators}</span>
                   </div>
                   <div className="w-full bg-muted rounded-full h-1.5">
-                    <div
-                      className="h-1.5 rounded-full bg-[#1e3a5f] transition-all"
-                      style={{ width: `${(region.activeOperators / 4) * 100}%` }}
-                    />
+                    <div className="h-1.5 rounded-full bg-[#1e3a5f] transition-all"
+                      style={{ width: `${(region.activeOperators / 4) * 100}%` }} />
                   </div>
                 </div>
               ))}
@@ -928,21 +1254,16 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
           </CardHeader>
           <CardContent className="space-y-2">
             {bestRegions.map((region, i) => (
-              <div
-                key={region.code}
+              <div key={region.code}
                 className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
-                onClick={() => onSelectRegion(region)}
-              >
+                onClick={() => onSelectRegion(region)}>
                 <span className="text-xs font-bold text-emerald-600 w-4">#{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{region.name}</p>
                   <p className="text-[10px] text-muted-foreground">Couverture: {region.coverage}%</p>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="text-[10px] shrink-0"
-                  style={{ borderColor: '#22c55e', color: '#22c55e' }}
-                >
+                <Badge variant="outline" className="text-[10px] shrink-0"
+                  style={{ borderColor: '#22c55e', color: '#22c55e' }}>
                   {region.qosScore.toFixed(1)}%
                 </Badge>
               </div>
@@ -960,11 +1281,9 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
           </CardHeader>
           <CardContent className="space-y-2">
             {worstRegions.map((region) => (
-              <div
-                key={region.code}
+              <div key={region.code}
                 className="flex items-center gap-2 p-2 rounded-md hover:bg-red-50 cursor-pointer transition-colors border border-red-100"
-                onClick={() => onSelectRegion(region)}
-              >
+                onClick={() => onSelectRegion(region)}>
                 <TrendingDown className="h-3.5 w-3.5 text-red-500 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium truncate">{region.name}</p>
@@ -972,11 +1291,8 @@ export default function GuineaMap({ regions = FALLBACK_REGIONS, selectedRegion, 
                     {region.complaintCount} plaintes · {region.coverage}% couverture
                   </p>
                 </div>
-                <Badge
-                  variant="outline"
-                  className="text-[10px] shrink-0"
-                  style={{ borderColor: '#ef4444', color: '#ef4444' }}
-                >
+                <Badge variant="outline" className="text-[10px] shrink-0"
+                  style={{ borderColor: '#ef4444', color: '#ef4444' }}>
                   {region.qosScore.toFixed(1)}%
                 </Badge>
               </div>

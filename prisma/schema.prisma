@@ -240,3 +240,23 @@ model RegionOperator {
 
   @@unique([regionId, operatorId])
 }
+
+model Locality {
+  id              String   @id @default(cuid())
+  name            String
+  region          String
+  prefecture      String?
+  type            String   @default("urbain")  // urbain, periurbain, rural, axe_routier
+  population      Int?
+  hasMobile2G     Boolean  @default(false)
+  hasMobile3G     Boolean  @default(false)
+  hasMobile4G     Boolean  @default(false)
+  hasFixedInternet Boolean @default(false)
+  latitude        Float?
+  longitude       Float?
+  isRoadAxis      Boolean  @default(false)
+  roadAxisName    String?
+  tested          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
