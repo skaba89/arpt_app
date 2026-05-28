@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -13,20 +15,34 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Gavel, Search } from 'lucide-react'
+import { apiClient, ApiError } from '@/lib/api-client'
 
-const mockSanctions = [
-  { id: '1', reference: 'SAN-2025-001', title: 'Non-respect des seuils QoS Q3 2024', type: 'financial', operator: 'Celcom Guinée', amount: 50000000, status: 'proposed' },
-  { id: '2', reference: 'SAN-2025-002', title: 'Retard de déclaration de couverture', type: 'financial', operator: 'MTN Guinée', amount: 25000000, status: 'decided' },
-  { id: '3', reference: 'SAN-2024-015', title: 'Interruption de service non signalée', type: 'suspension', operator: 'Sotelgui', amount: null, status: 'executed' },
-  { id: '4', reference: 'SAN-2025-003', title: 'Non-conformité aux conditions de licence', type: 'financial', operator: 'Orange Guinée', amount: 75000000, status: 'proposed' },
-  { id: '5', reference: 'SAN-2024-012', title: 'Publicité mensongère sur les tarifs', type: 'warning', operator: 'MTN Guinée', amount: null, status: 'executed' },
-  { id: '6', reference: 'SAN-2024-010', title: 'Défaut de qualité voix persistant', type: 'financial', operator: 'Celcom Guinée', amount: 30000000, status: 'decided' },
-  { id: '7', reference: 'SAN-2025-004', title: 'Non-respect obligations couverture rurale', type: 'financial', operator: 'Orange Guinée', amount: 40000000, status: 'proposed' },
-]
+interface Operator {
+  id: string
+  name: string
+  code: string
+}
+
+interface Sanction {
+  id: string
+  reference: string
+  title: string
+  description: string
+  type: string
+  amount: number | null
+  operatorId: string
+  operator?: Operator
+  status: string
+  createdAt: string
+}
 
 const typeMap: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className?: string }> = {
-  financial: { label: 'Financière', variant: 'destructive' },
+  avertissement: { label: 'Avertissement', variant: 'outline' },
+  amine: { label: 'Amende', variant: 'destructive' },
   suspension: { label: 'Suspension', variant: 'default', className: 'bg-orange-500 hover:bg-orange-600' },
+  retrait_licence: { label: 'Retrait de licence', variant: 'destructive' },
+  autre: { label: 'Autre', variant: 'secondary' },
+  financial: { label: 'Financière', variant: 'destructive' },
   warning: { label: 'Avertissement', variant: 'outline' },
 }
 
@@ -43,16 +59,46 @@ function formatAmount(amount: number | null) {
 }
 
 export default function SanctionsPage() {
+  const [sanctions, setSanctions] = useState<Sanction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
-  const filtered = mockSanctions.filter(
+  const loadSanctions = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await apiClient.get<Sanction[]>('/api/sanctions', {
+        params: { limit: 100 },
+      })
+      if (response.success && response.data) {
+        setSanctions(response.data)
+      } else {
+        setError(response.error?.message || 'Erreur de chargement')
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Erreur de chargement des sanctions')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadSanctions()
+  }, [loadSanctions])
+
+  const filtered = sanctions.filter(
     (s) =>
       s.title.toLowerCase().includes(search.toLowerCase()) ||
       s.reference.toLowerCase().includes(search.toLowerCase()) ||
-      s.operator.toLowerCase().includes(search.toLowerCase())
+      (s.operator?.name || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  const totalProposed = mockSanctions
+  const totalProposed = sanctions
     .filter((s) => s.status === 'proposed' && s.amount)
     .reduce((sum, s) => sum + (s.amount || 0), 0)
 
@@ -74,7 +120,9 @@ export default function SanctionsPage() {
             <Gavel className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockSanctions.length}</div>
+            {loading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-2xl font-bold">{sanctions.length}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -83,9 +131,11 @@ export default function SanctionsPage() {
             <div className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockSanctions.filter((s) => s.status === 'proposed').length}
-            </div>
+            {loading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-2xl font-bold">
+                {sanctions.filter((s) => s.status === 'proposed').length}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -94,9 +144,11 @@ export default function SanctionsPage() {
             <div className="h-2.5 w-2.5 rounded-full bg-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockSanctions.filter((s) => s.status === 'decided').length}
-            </div>
+            {loading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-2xl font-bold">
+                {sanctions.filter((s) => s.status === 'decided').length}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -105,9 +157,11 @@ export default function SanctionsPage() {
             <span className="text-xs text-muted-foreground">GNF</span>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
-              {formatAmount(totalProposed)}
-            </div>
+            {loading ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold text-destructive">
+                {formatAmount(totalProposed)}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -130,56 +184,74 @@ export default function SanctionsPage() {
               />
             </div>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Référence</TableHead>
-                <TableHead>Titre</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Opérateur</TableHead>
-                <TableHead className="text-right">Montant</TableHead>
-                <TableHead>Statut</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((sanction) => (
-                <TableRow key={sanction.id}>
-                  <TableCell>
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
-                      {sanction.reference}
-                    </code>
-                  </TableCell>
-                  <TableCell className="font-medium max-w-[250px] truncate">
-                    {sanction.title}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={typeMap[sanction.type]?.variant}
-                      className={typeMap[sanction.type]?.className}
-                    >
-                      {typeMap[sanction.type]?.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{sanction.operator}</TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatAmount(sanction.amount)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusMap[sanction.status]?.variant}>
-                      {statusMap[sanction.status]?.label}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && (
+          {error ? (
+            <div className="text-center py-8 text-destructive">
+              <p className="text-sm">{error}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={loadSanctions}>
+                Réessayer
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    Aucune sanction trouvée
-                  </TableCell>
+                  <TableHead>Référence</TableHead>
+                  <TableHead>Titre</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Opérateur</TableHead>
+                  <TableHead className="text-right">Montant</TableHead>
+                  <TableHead>Statut</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 6 }).map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : filtered.length > 0 ? (
+                  filtered.map((sanction) => (
+                    <TableRow key={sanction.id}>
+                      <TableCell>
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+                          {sanction.reference}
+                        </code>
+                      </TableCell>
+                      <TableCell className="font-medium max-w-[250px] truncate">
+                        {sanction.title}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={typeMap[sanction.type]?.variant}
+                          className={typeMap[sanction.type]?.className}
+                        >
+                          {typeMap[sanction.type]?.label || sanction.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{sanction.operator?.name || '—'}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatAmount(sanction.amount)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusMap[sanction.status]?.variant}>
+                          {statusMap[sanction.status]?.label || sanction.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      Aucune sanction trouvée
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

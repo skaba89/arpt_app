@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { setClientToken, getClientToken } from '@/lib/api-client'
 
 interface User {
   id: string
@@ -30,6 +31,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function checkSession() {
       try {
+        // Try to get stored token first
+        const storedToken = getClientToken()
+
         const res = await fetch('/api/auth/[...nextauth]', {
           method: 'GET',
           credentials: 'include',
@@ -39,6 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (data?.user) {
             setUser(data.user)
           }
+        } else if (!storedToken) {
+          // No valid session and no stored token
+          setUser(null)
         }
       } catch {
         // Session check failed, user is not authenticated
@@ -64,7 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: data.error || 'Erreur de connexion' }
       }
 
-      setUser(data.user)
+      // Store the JWT token from login response for Authorization header usage
+      if (data.data?.token) {
+        setClientToken(data.data.token)
+      }
+
+      setUser(data.data?.user || data.user)
       return { success: true }
     } catch {
       return { success: false, error: 'Erreur de connexion au serveur' }
@@ -77,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore logout errors
     } finally {
+      setClientToken(null)
       setUser(null)
       router.push('/login')
     }

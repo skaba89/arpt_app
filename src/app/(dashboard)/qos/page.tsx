@@ -1,9 +1,12 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -12,65 +15,48 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Activity, Phone, Wifi, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Activity, Phone, Wifi, Clock, TrendingUp, TrendingDown, Minus, Plus } from 'lucide-react'
+import { apiClient, ApiError } from '@/lib/api-client'
 
-const mockQosData = [
-  {
-    id: '1',
-    operator: 'Orange Guinée',
-    period: 'Q1 2025',
-    callSuccessRate: 94.2,
-    dropRate: 2.1,
-    dataThroughput: 28.5,
-    latency: 35,
-    overallScore: 82,
-    status: 'reviewed',
-  },
-  {
-    id: '2',
-    operator: 'MTN Guinée',
-    period: 'Q1 2025',
-    callSuccessRate: 89.7,
-    dropRate: 3.8,
-    dataThroughput: 22.1,
-    latency: 48,
-    overallScore: 76,
-    status: 'reviewed',
-  },
-  {
-    id: '3',
-    operator: 'Celcom Guinée',
-    period: 'Q1 2025',
-    callSuccessRate: 85.3,
-    dropRate: 5.2,
-    dataThroughput: 18.3,
-    latency: 62,
-    overallScore: 71,
-    status: 'draft',
-  },
-  {
-    id: '4',
-    operator: 'Orange Guinée',
-    period: 'Q4 2024',
-    callSuccessRate: 92.8,
-    dropRate: 2.5,
-    dataThroughput: 26.7,
-    latency: 38,
-    overallScore: 80,
-    status: 'reviewed',
-  },
-  {
-    id: '5',
-    operator: 'MTN Guinée',
-    period: 'Q4 2024',
-    callSuccessRate: 87.1,
-    dropRate: 4.1,
-    dataThroughput: 20.5,
-    latency: 52,
-    overallScore: 73,
-    status: 'reviewed',
-  },
-]
+interface Operator {
+  id: string
+  name: string
+  code: string
+}
+
+interface QosReport {
+  id: string
+  operatorId: string
+  operator?: Operator
+  period: string
+  region?: string | null
+  callSuccessRate: number | null
+  callSetupTime: number | null
+  dropRate: number | null
+  handoverSuccessRate: number | null
+  smsSuccessRate: number | null
+  dataThroughput: number | null
+  latency: number | null
+  overallScore: number | null
+  status: string
+  createdAt: string
+}
 
 function getScoreColor(score: number) {
   if (score >= 80) return 'text-emerald-600'
@@ -97,110 +83,310 @@ function TrendIcon({ value, threshold }: { value: number; threshold: number }) {
 }
 
 export default function QosPage() {
-  // Latest reports per operator
-  const latestReports = mockQosData.filter((r) => r.period === 'Q1 2025')
+  const [reports, setReports] = useState<QosReport[]>([])
+  const [operators, setOperators] = useState<Operator[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  // Form state
+  const [formOperatorId, setFormOperatorId] = useState('')
+  const [formPeriod, setFormPeriod] = useState('')
+  const [formCallSuccessRate, setFormCallSuccessRate] = useState('')
+  const [formDropRate, setFormDropRate] = useState('')
+  const [formDataThroughput, setFormDataThroughput] = useState('')
+  const [formLatency, setFormLatency] = useState('')
+  const [formOverallScore, setFormOverallScore] = useState('')
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const [qosRes, opRes] = await Promise.all([
+        apiClient.get<QosReport[]>('/api/qos', { params: { limit: 100 } }),
+        apiClient.get<Operator[]>('/api/operators', { params: { limit: 100 } }),
+      ])
+      if (qosRes.success && qosRes.data) setReports(qosRes.data)
+      if (opRes.success && opRes.data) setOperators(opRes.data)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Erreur de chargement')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const handleCreateReport = async () => {
+    try {
+      setSubmitting(true)
+      setFormError(null)
+
+      const response = await apiClient.post<QosReport>('/api/qos', {
+        operatorId: formOperatorId,
+        period: formPeriod,
+        callSuccessRate: formCallSuccessRate ? parseFloat(formCallSuccessRate) : undefined,
+        dropRate: formDropRate ? parseFloat(formDropRate) : undefined,
+        dataThroughput: formDataThroughput ? parseFloat(formDataThroughput) : undefined,
+        latency: formLatency ? parseFloat(formLatency) : undefined,
+        overallScore: formOverallScore ? parseFloat(formOverallScore) : undefined,
+      })
+
+      if (response.success) {
+        setDialogOpen(false)
+        resetForm()
+        loadData()
+      } else {
+        setFormError(response.error?.message || 'Erreur lors de la création')
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setFormError(err.message)
+      } else {
+        setFormError('Erreur lors de la création du rapport')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const resetForm = () => {
+    setFormOperatorId('')
+    setFormPeriod('')
+    setFormCallSuccessRate('')
+    setFormDropRate('')
+    setFormDataThroughput('')
+    setFormLatency('')
+    setFormOverallScore('')
+    setFormError(null)
+  }
+
+  // Get the latest report per operator for the card view
+  const latestReportsMap = new Map<string, QosReport>()
+  for (const report of reports) {
+    if (!latestReportsMap.has(report.operatorId)) {
+      latestReportsMap.set(report.operatorId, report)
+    }
+  }
+  const latestReports = Array.from(latestReportsMap.values())
 
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Qualité de Service (QoS)</h1>
-        <p className="text-muted-foreground">
-          Suivi des indicateurs de qualité de service des opérateurs télécoms
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Qualité de Service (QoS)</h1>
+          <p className="text-muted-foreground">
+            Suivi des indicateurs de qualité de service des opérateurs télécoms
+          </p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nouveau rapport
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Nouveau rapport QoS</DialogTitle>
+              <DialogDescription>
+                Enregistrer un nouveau rapport de qualité de service
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+              {formError && (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                  {formError}
+                </div>
+              )}
+              <div className="grid gap-2">
+                <Label>Opérateur</Label>
+                <Select value={formOperatorId} onValueChange={setFormOperatorId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner l'opérateur" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {operators.map((op) => (
+                      <SelectItem key={op.id} value={op.id}>{op.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="qos-period">Période</Label>
+                <Input id="qos-period" placeholder="Ex: Q1 2025" value={formPeriod} onChange={(e) => setFormPeriod(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="qos-csr">Taux abouti (%)</Label>
+                  <Input id="qos-csr" type="number" step="0.1" placeholder="94.2" value={formCallSuccessRate} onChange={(e) => setFormCallSuccessRate(e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="qos-dr">Taux coupé (%)</Label>
+                  <Input id="qos-dr" type="number" step="0.1" placeholder="2.1" value={formDropRate} onChange={(e) => setFormDropRate(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="qos-dt">Débit data (Mbps)</Label>
+                  <Input id="qos-dt" type="number" step="0.1" placeholder="28.5" value={formDataThroughput} onChange={(e) => setFormDataThroughput(e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="qos-lat">Latence (ms)</Label>
+                  <Input id="qos-lat" type="number" step="1" placeholder="35" value={formLatency} onChange={(e) => setFormLatency(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="qos-score">Score global (%)</Label>
+                <Input id="qos-score" type="number" step="0.1" placeholder="82" value={formOverallScore} onChange={(e) => setFormOverallScore(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm() }}>
+                Annuler
+              </Button>
+              <Button onClick={handleCreateReport} disabled={submitting || !formOperatorId || !formPeriod}>
+                {submitting ? 'Enregistrement...' : 'Enregistrer'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* QoS Metric Cards per Operator */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {latestReports.map((report) => (
-          <Card key={report.id} className="relative overflow-hidden">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">{report.operator}</CardTitle>
-                <Badge variant={report.status === 'reviewed' ? 'default' : 'outline'}>
-                  {report.status === 'reviewed' ? 'Vérifié' : 'Brouillon'}
-                </Badge>
-              </div>
-              <CardDescription>Période : {report.period}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Overall Score */}
-              <div className={`flex items-center justify-between rounded-lg p-3 ${getScoreBg(report.overallScore)}`}>
-                <span className="text-sm font-medium">Score global</span>
-                <span className={`text-2xl font-bold ${getScoreColor(report.overallScore)}`}>
-                  {report.overallScore}%
-                </span>
-              </div>
-
-              {/* Metrics */}
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                      Taux d&apos;appel abouti
-                    </span>
-                    <span className="font-medium">{report.callSuccessRate}%</span>
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="relative overflow-hidden">
+              <CardHeader className="pb-3">
+                <Skeleton className="h-5 w-32 mb-1" />
+                <Skeleton className="h-3 w-20" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-16 w-full rounded-lg" />
+                {Array.from({ length: 4 }).map((_, j) => (
+                  <div key={j} className="space-y-1.5">
+                    <div className="flex justify-between"><Skeleton className="h-4 w-24" /><Skeleton className="h-4 w-10" /></div>
+                    <Skeleton className="h-1.5 w-full rounded-full" />
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full ${getProgressColor(report.callSuccessRate)}`}
-                      style={{ width: `${report.callSuccessRate}%` }}
-                    />
-                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))
+        ) : latestReports.length > 0 ? (
+          latestReports.map((report) => (
+            <Card key={report.id} className="relative overflow-hidden">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">{report.operator?.name || 'N/A'}</CardTitle>
+                  <Badge variant={report.status === 'reviewed' ? 'default' : 'outline'}>
+                    {report.status === 'reviewed' ? 'Vérifié' : 'Brouillon'}
+                  </Badge>
+                </div>
+                <CardDescription>Période : {report.period}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Overall Score */}
+                <div className={`flex items-center justify-between rounded-lg p-3 ${report.overallScore ? getScoreBg(report.overallScore) : 'bg-muted'}`}>
+                  <span className="text-sm font-medium">Score global</span>
+                  <span className={`text-2xl font-bold ${report.overallScore ? getScoreColor(report.overallScore) : 'text-muted-foreground'}`}>
+                    {report.overallScore !== null ? `${report.overallScore}%` : '—'}
+                  </span>
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1.5">
-                      <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-                      Taux d&apos;appel coupé
-                    </span>
-                    <span className="font-medium">{report.dropRate}%</span>
+                {/* Metrics */}
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                        Taux d&apos;appel abouti
+                      </span>
+                      <span className="font-medium">{report.callSuccessRate !== null ? `${report.callSuccessRate}%` : '—'}</span>
+                    </div>
+                    {report.callSuccessRate !== null && (
+                      <div className="h-1.5 w-full rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${getProgressColor(report.callSuccessRate)}`}
+                          style={{ width: `${report.callSuccessRate}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full ${report.dropRate <= 3 ? 'bg-emerald-500' : report.dropRate <= 5 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                      style={{ width: `${Math.min(report.dropRate * 10, 100)}%` }}
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1.5">
-                      <Wifi className="h-3.5 w-3.5 text-muted-foreground" />
-                      Débit data (Mbps)
-                    </span>
-                    <span className="font-medium">{report.dataThroughput}</span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5">
+                        <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                        Taux d&apos;appel coupé
+                      </span>
+                      <span className="font-medium">{report.dropRate !== null ? `${report.dropRate}%` : '—'}</span>
+                    </div>
+                    {report.dropRate !== null && (
+                      <div className="h-1.5 w-full rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${report.dropRate <= 3 ? 'bg-emerald-500' : report.dropRate <= 5 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          style={{ width: `${Math.min(report.dropRate * 10, 100)}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full ${getProgressColor(report.dataThroughput / 0.35)}`}
-                      style={{ width: `${Math.min((report.dataThroughput / 40) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                      Latence (ms)
-                    </span>
-                    <span className="font-medium">{report.latency} ms</span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5">
+                        <Wifi className="h-3.5 w-3.5 text-muted-foreground" />
+                        Débit data (Mbps)
+                      </span>
+                      <span className="font-medium">{report.dataThroughput !== null ? report.dataThroughput : '—'}</span>
+                    </div>
+                    {report.dataThroughput !== null && (
+                      <div className="h-1.5 w-full rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${getProgressColor(report.dataThroughput / 0.35)}`}
+                          style={{ width: `${Math.min((report.dataThroughput / 40) * 100, 100)}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full ${report.latency <= 40 ? 'bg-emerald-500' : report.latency <= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                      style={{ width: `${Math.min((report.latency / 100) * 100, 100)}%` }}
-                    />
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        Latence (ms)
+                      </span>
+                      <span className="font-medium">{report.latency !== null ? `${report.latency} ms` : '—'}</span>
+                    </div>
+                    {report.latency !== null && (
+                      <div className="h-1.5 w-full rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${report.latency <= 40 ? 'bg-emerald-500' : report.latency <= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          style={{ width: `${Math.min((report.latency / 100) * 100, 100)}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Card className="sm:col-span-2 lg:col-span-3">
+            <CardContent className="text-center py-8 text-muted-foreground">
+              <p className="text-sm">Aucun rapport QoS disponible</p>
             </CardContent>
           </Card>
-        ))}
+        )}
       </div>
 
       {/* Full history table */}
@@ -210,55 +396,83 @@ export default function QosPage() {
           <CardDescription>Tous les rapports de qualité de service par opérateur et période</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Opérateur</TableHead>
-                <TableHead>Période</TableHead>
-                <TableHead className="text-center">Taux abouti</TableHead>
-                <TableHead className="text-center">Taux coupé</TableHead>
-                <TableHead className="text-center">Débit (Mbps)</TableHead>
-                <TableHead className="text-center">Latence (ms)</TableHead>
-                <TableHead className="text-center">Score</TableHead>
-                <TableHead>Statut</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockQosData.map((report) => (
-                <TableRow key={report.id}>
-                  <TableCell className="font-medium">{report.operator}</TableCell>
-                  <TableCell>{report.period}</TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {report.callSuccessRate}%
-                      <TrendIcon value={report.callSuccessRate} threshold={90} />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {report.dropRate}%
-                      <TrendIcon value={3 - report.dropRate} threshold={0} />
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">{report.dataThroughput}</TableCell>
-                  <TableCell className="text-center">{report.latency}</TableCell>
-                  <TableCell className="text-center">
-                    <Badge
-                      variant="outline"
-                      className={getScoreColor(report.overallScore)}
-                    >
-                      {report.overallScore}%
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={report.status === 'reviewed' ? 'default' : 'outline'}>
-                      {report.status === 'reviewed' ? 'Vérifié' : 'Brouillon'}
-                    </Badge>
-                  </TableCell>
+          {error ? (
+            <div className="text-center py-8 text-destructive">
+              <p className="text-sm">{error}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={loadData}>
+                Réessayer
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Opérateur</TableHead>
+                  <TableHead>Période</TableHead>
+                  <TableHead className="text-center">Taux abouti</TableHead>
+                  <TableHead className="text-center">Taux coupé</TableHead>
+                  <TableHead className="text-center">Débit (Mbps)</TableHead>
+                  <TableHead className="text-center">Latence (ms)</TableHead>
+                  <TableHead className="text-center">Score</TableHead>
+                  <TableHead>Statut</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 8 }).map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : reports.length > 0 ? (
+                  reports.map((report) => (
+                    <TableRow key={report.id}>
+                      <TableCell className="font-medium">{report.operator?.name || 'N/A'}</TableCell>
+                      <TableCell>{report.period}</TableCell>
+                      <TableCell className="text-center">
+                        {report.callSuccessRate !== null ? (
+                          <div className="flex items-center justify-center gap-1">
+                            {report.callSuccessRate}%
+                            <TrendIcon value={report.callSuccessRate} threshold={90} />
+                          </div>
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {report.dropRate !== null ? (
+                          <div className="flex items-center justify-center gap-1">
+                            {report.dropRate}%
+                            <TrendIcon value={3 - report.dropRate} threshold={0} />
+                          </div>
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell className="text-center">{report.dataThroughput !== null ? report.dataThroughput : '—'}</TableCell>
+                      <TableCell className="text-center">{report.latency !== null ? report.latency : '—'}</TableCell>
+                      <TableCell className="text-center">
+                        {report.overallScore !== null ? (
+                          <Badge variant="outline" className={getScoreColor(report.overallScore)}>
+                            {report.overallScore}%
+                          </Badge>
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={report.status === 'reviewed' ? 'default' : 'outline'}>
+                          {report.status === 'reviewed' ? 'Vérifié' : 'Brouillon'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      Aucun rapport QoS trouvé
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

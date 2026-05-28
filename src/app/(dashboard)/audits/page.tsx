@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -13,18 +15,34 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ClipboardCheck, Search } from 'lucide-react'
+import { apiClient, ApiError } from '@/lib/api-client'
 
-const mockAudits = [
-  { id: '1', reference: 'AUD-2025-001', title: 'Audit de couverture réseau — Conakry', type: 'coverage', status: 'planned', startDate: '2025-03-15', operator: 'Orange Guinée' },
-  { id: '2', reference: 'AUD-2025-002', title: 'Audit de conformité technique', type: 'compliance', status: 'in_progress', startDate: '2025-02-20', operator: 'MTN Guinée' },
-  { id: '3', reference: 'AUD-2024-008', title: 'Audit QoS — Région de Kindia', type: 'qos', status: 'completed', startDate: '2024-11-10', operator: 'Celcom Guinée' },
-  { id: '4', reference: 'AUD-2025-003', title: 'Audit financier des redevances', type: 'financial', status: 'planned', startDate: '2025-04-01', operator: null },
-  { id: '5', reference: 'AUD-2024-006', title: 'Audit de sécurité des réseaux', type: 'security', status: 'completed', startDate: '2024-09-05', operator: 'Orange Guinée' },
-  { id: '6', reference: 'AUD-2025-004', title: 'Vérification des indicateurs QoS', type: 'qos', status: 'in_progress', startDate: '2025-02-01', operator: 'MTN Guinée' },
-  { id: '7', reference: 'AUD-2024-003', title: 'Audit de couverture — Boké', type: 'coverage', status: 'completed', startDate: '2024-07-15', operator: 'Celcom Guinée' },
-]
+interface Operator {
+  id: string
+  name: string
+  code: string
+}
+
+interface Audit {
+  id: string
+  reference: string
+  title: string
+  description: string
+  type: string
+  status: string
+  startDate: string | null
+  endDate: string | null
+  operatorId: string | null
+  operator?: Operator | null
+  createdAt: string
+}
 
 const typeMap: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className?: string }> = {
+  conformite: { label: 'Conformité', variant: 'secondary' },
+  technique: { label: 'Technique', variant: 'default' },
+  financier: { label: 'Financier', variant: 'destructive' },
+  procedure: { label: 'Procédure', variant: 'outline' },
+  autre: { label: 'Autre', variant: 'secondary' },
   coverage: { label: 'Couverture', variant: 'default' },
   compliance: { label: 'Conformité', variant: 'secondary' },
   qos: { label: 'QoS', variant: 'outline' },
@@ -40,13 +58,43 @@ const statusMap: Record<string, { label: string; variant: 'default' | 'secondary
 }
 
 export default function AuditsPage() {
+  const [audits, setAudits] = useState<Audit[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
-  const filtered = mockAudits.filter(
+  const loadAudits = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await apiClient.get<Audit[]>('/api/audits', {
+        params: { limit: 100 },
+      })
+      if (response.success && response.data) {
+        setAudits(response.data)
+      } else {
+        setError(response.error?.message || 'Erreur de chargement')
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Erreur de chargement des audits')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadAudits()
+  }, [loadAudits])
+
+  const filtered = audits.filter(
     (a) =>
       a.title.toLowerCase().includes(search.toLowerCase()) ||
       a.reference.toLowerCase().includes(search.toLowerCase()) ||
-      (a.operator && a.operator.toLowerCase().includes(search.toLowerCase()))
+      (a.operator?.name || '').toLowerCase().includes(search.toLowerCase())
   )
 
   return (
@@ -67,7 +115,9 @@ export default function AuditsPage() {
             <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockAudits.length}</div>
+            {loading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-2xl font-bold">{audits.length}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -76,9 +126,11 @@ export default function AuditsPage() {
             <div className="h-2.5 w-2.5 rounded-full bg-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockAudits.filter((a) => a.status === 'in_progress').length}
-            </div>
+            {loading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-2xl font-bold">
+                {audits.filter((a) => a.status === 'in_progress').length}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -87,9 +139,11 @@ export default function AuditsPage() {
             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockAudits.filter((a) => a.status === 'completed').length}
-            </div>
+            {loading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-2xl font-bold">
+                {audits.filter((a) => a.status === 'completed').length}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -112,61 +166,79 @@ export default function AuditsPage() {
               />
             </div>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Référence</TableHead>
-                <TableHead>Titre</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Opérateur</TableHead>
-                <TableHead>Date de début</TableHead>
-                <TableHead>Statut</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((audit) => (
-                <TableRow key={audit.id}>
-                  <TableCell>
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
-                      {audit.reference}
-                    </code>
-                  </TableCell>
-                  <TableCell className="font-medium max-w-[250px] truncate">
-                    {audit.title}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={typeMap[audit.type]?.variant}
-                      className={typeMap[audit.type]?.className}
-                    >
-                      {typeMap[audit.type]?.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{audit.operator || '—'}</TableCell>
-                  <TableCell>
-                    {audit.startDate
-                      ? new Date(audit.startDate).toLocaleDateString('fr-FR')
-                      : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={statusMap[audit.status]?.variant}
-                      className={statusMap[audit.status]?.className}
-                    >
-                      {statusMap[audit.status]?.label}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && (
+          {error ? (
+            <div className="text-center py-8 text-destructive">
+              <p className="text-sm">{error}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={loadAudits}>
+                Réessayer
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    Aucun audit trouvé
-                  </TableCell>
+                  <TableHead>Référence</TableHead>
+                  <TableHead>Titre</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Opérateur</TableHead>
+                  <TableHead>Date de début</TableHead>
+                  <TableHead>Statut</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 6 }).map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : filtered.length > 0 ? (
+                  filtered.map((audit) => (
+                    <TableRow key={audit.id}>
+                      <TableCell>
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+                          {audit.reference}
+                        </code>
+                      </TableCell>
+                      <TableCell className="font-medium max-w-[250px] truncate">
+                        {audit.title}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={typeMap[audit.type]?.variant}
+                          className={typeMap[audit.type]?.className}
+                        >
+                          {typeMap[audit.type]?.label || audit.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{audit.operator?.name || '—'}</TableCell>
+                      <TableCell>
+                        {audit.startDate
+                          ? new Date(audit.startDate).toLocaleDateString('fr-FR')
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={statusMap[audit.status]?.variant}
+                          className={statusMap[audit.status]?.className}
+                        >
+                          {statusMap[audit.status]?.label || audit.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      Aucun audit trouvé
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

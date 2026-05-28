@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -31,27 +32,119 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, Search, Building2 } from 'lucide-react'
+import { apiClient, ApiError } from '@/lib/api-client'
 
-const mockOperators = [
-  { id: '1', name: 'Orange Guinée', code: 'ORANGE', type: 'Mobile', status: 'active', licenseDate: '2005-03-15', contactEmail: 'contact@orange.gn', contactPhone: '+224 622 000 000' },
-  { id: '2', name: 'MTN Guinée', code: 'MTN', type: 'Mobile', status: 'active', licenseDate: '2006-07-20', contactEmail: 'info@mtn.gn', contactPhone: '+224 623 000 000' },
-  { id: '3', name: 'Celcom Guinée', code: 'CELCOM', type: 'Mobile', status: 'active', licenseDate: '2008-01-10', contactEmail: 'contact@celcom.gn', contactPhone: '+224 624 000 000' },
-  { id: '4', name: 'Guinéenne de Téléphonie', code: 'GTEL', type: 'Fixe', status: 'pending', licenseDate: null, contactEmail: 'info@gtelecom.gn', contactPhone: null },
-  { id: '5', name: 'Sotelgui', code: 'SOTELGUI', type: 'Fixe + Mobile', status: 'inactive', licenseDate: '1995-06-01', contactEmail: 'contact@sotelgui.gn', contactPhone: null },
-  { id: '6', name: 'Africa Telecom', code: 'AFTEL', type: 'Internet', status: 'pending', licenseDate: null, contactEmail: 'info@africatelecom.gn', contactPhone: null },
-]
+interface Operator {
+  id: string
+  name: string
+  code: string
+  type: string
+  status: string
+  licenseDate: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  createdAt: string
+}
 
 const statusMap: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   active: { label: 'Actif', variant: 'default' },
   pending: { label: 'En attente', variant: 'outline' },
+  suspended: { label: 'Suspendu', variant: 'secondary' },
   inactive: { label: 'Inactif', variant: 'destructive' },
+  revoked: { label: 'Révoqué', variant: 'destructive' },
+}
+
+const typeLabels: Record<string, string> = {
+  mobile: 'Mobile',
+  fixe: 'Fixe',
+  internet: 'Internet',
+  mobile_fixe: 'Fixe + Mobile',
 }
 
 export default function OperatorsPage() {
+  const [operators, setOperators] = useState<Operator[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-  const filtered = mockOperators.filter(
+  // Form state
+  const [formName, setFormName] = useState('')
+  const [formCode, setFormCode] = useState('')
+  const [formType, setFormType] = useState('')
+  const [formEmail, setFormEmail] = useState('')
+  const [formPhone, setFormPhone] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const loadOperators = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await apiClient.get<Operator[]>('/api/operators', {
+        params: { limit: 100 },
+      })
+      if (response.success && response.data) {
+        setOperators(response.data)
+      } else {
+        setError(response.error?.message || 'Erreur de chargement')
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError('Erreur de chargement des opérateurs')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadOperators()
+  }, [loadOperators])
+
+  const handleCreateOperator = async () => {
+    try {
+      setSubmitting(true)
+      setFormError(null)
+
+      const response = await apiClient.post<Operator>('/api/operators', {
+        name: formName,
+        code: formCode,
+        type: formType || 'mobile',
+        contactEmail: formEmail || undefined,
+        contactPhone: formPhone || undefined,
+      })
+
+      if (response.success) {
+        setDialogOpen(false)
+        resetForm()
+        loadOperators() // Refresh the list
+      } else {
+        setFormError(response.error?.message || 'Erreur lors de la création')
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setFormError(err.message)
+      } else {
+        setFormError('Erreur lors de la création de l\'opérateur')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const resetForm = () => {
+    setFormName('')
+    setFormCode('')
+    setFormType('')
+    setFormEmail('')
+    setFormPhone('')
+    setFormError(null)
+  }
+
+  const filtered = operators.filter(
     (op) =>
       op.name.toLowerCase().includes(search.toLowerCase()) ||
       op.code.toLowerCase().includes(search.toLowerCase())
@@ -67,7 +160,7 @@ export default function OperatorsPage() {
             Gestion des opérateurs de télécommunications en Guinée
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
@@ -82,17 +175,22 @@ export default function OperatorsPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              {formError && (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+                  {formError}
+                </div>
+              )}
               <div className="grid gap-2">
                 <Label htmlFor="op-name">Nom de l&apos;opérateur</Label>
-                <Input id="op-name" placeholder="Ex: Orange Guinée" />
+                <Input id="op-name" placeholder="Ex: Orange Guinée" value={formName} onChange={(e) => setFormName(e.target.value)} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="op-code">Code</Label>
-                <Input id="op-code" placeholder="Ex: ORANGE" />
+                <Input id="op-code" placeholder="Ex: ORANGE" value={formCode} onChange={(e) => setFormCode(e.target.value)} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="op-type">Type</Label>
-                <Select>
+                <Select value={formType} onValueChange={setFormType}>
                   <SelectTrigger>
                     <SelectValue placeholder="Sélectionner le type" />
                   </SelectTrigger>
@@ -100,25 +198,25 @@ export default function OperatorsPage() {
                     <SelectItem value="mobile">Mobile</SelectItem>
                     <SelectItem value="fixe">Fixe</SelectItem>
                     <SelectItem value="internet">Internet</SelectItem>
-                    <SelectItem value="fixe-mobile">Fixe + Mobile</SelectItem>
+                    <SelectItem value="mobile_fixe">Fixe + Mobile</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="op-email">Email de contact</Label>
-                <Input id="op-email" type="email" placeholder="contact@operateur.gn" />
+                <Input id="op-email" type="email" placeholder="contact@operateur.gn" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="op-phone">Téléphone de contact</Label>
-                <Input id="op-phone" placeholder="+224 622 000 000" />
+                <Input id="op-phone" placeholder="+224 622 000 000" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm() }}>
                 Annuler
               </Button>
-              <Button onClick={() => setDialogOpen(false)}>
-                Enregistrer
+              <Button onClick={handleCreateOperator} disabled={submitting || !formName || !formCode}>
+                {submitting ? 'Enregistrement...' : 'Enregistrer'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -133,7 +231,11 @@ export default function OperatorsPage() {
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockOperators.length}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{operators.length}</div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -142,9 +244,13 @@ export default function OperatorsPage() {
             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockOperators.filter((o) => o.status === 'active').length}
-            </div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {operators.filter((o) => o.status === 'active').length}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -153,9 +259,13 @@ export default function OperatorsPage() {
             <div className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockOperators.filter((o) => o.status === 'pending').length}
-            </div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {operators.filter((o) => o.status === 'pending' || o.status === 'suspended').length}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -178,45 +288,65 @@ export default function OperatorsPage() {
               />
             </div>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Date de licence</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((op) => (
-                <TableRow key={op.id}>
-                  <TableCell className="font-medium">{op.name}</TableCell>
-                  <TableCell>
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{op.code}</code>
-                  </TableCell>
-                  <TableCell>{op.type}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusMap[op.status]?.variant || 'outline'}>
-                      {statusMap[op.status]?.label || op.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {op.licenseDate
-                      ? new Date(op.licenseDate).toLocaleDateString('fr-FR')
-                      : '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && (
+          {error ? (
+            <div className="text-center py-8 text-destructive">
+              <p className="text-sm">{error}</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={loadOperators}>
+                Réessayer
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    Aucun opérateur trouvé
-                  </TableCell>
+                  <TableHead>Nom</TableHead>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>Date de licence</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filtered.length > 0 ? (
+                  filtered.map((op) => (
+                    <TableRow key={op.id}>
+                      <TableCell className="font-medium">{op.name}</TableCell>
+                      <TableCell>
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{op.code}</code>
+                      </TableCell>
+                      <TableCell>{typeLabels[op.type] || op.type}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusMap[op.status]?.variant || 'outline'}>
+                          {statusMap[op.status]?.label || op.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {op.licenseDate
+                          ? new Date(op.licenseDate).toLocaleDateString('fr-FR')
+                          : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      Aucun opérateur trouvé
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

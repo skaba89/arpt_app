@@ -87,6 +87,39 @@ export const createDecisionSchema = z.object({
   type: z.enum(["reglementaire", "sanction", "arbitrage", "attribution", "autre"]),
 });
 
+// ── Utilisateurs ──────────────────────────────────────────────
+export const createUserSchema = z.object({
+  name: z.string().min(2, "Nom trop court").max(100),
+  email: z.string().email("Adresse email invalide"),
+  password: z.string().min(8, "Mot de passe trop court (min. 8 caractères)"),
+  role: z.enum([
+    "super_admin",
+    "admin",
+    "dg",
+    "directeur",
+    "chef_service",
+    "juriste",
+    "agent",
+    "operateur",
+    "citoyen",
+  ]).default("agent"),
+  service: z.string().optional().or(z.literal("")),
+  active: z.boolean().default(true),
+});
+
+// ── Notifications ─────────────────────────────────────────────
+export const createNotificationSchema = z.object({
+  title: z.string().min(2, "Titre trop court").max(200),
+  message: z.string().min(5, "Message trop court").max(2000),
+  type: z.enum(["info", "warning", "error", "success"]).default("info"),
+  category: z.string().optional().or(z.literal("")),
+  userId: z.string().min(1, "Utilisateur requis"),
+});
+
+export const markNotificationsReadSchema = z.object({
+  notificationIds: z.array(z.string().min(1)).min(1, "Au moins une notification requise"),
+});
+
 // ── Query params communs ──────────────────────────────────────
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -105,4 +138,7 @@ export type CreateComplaintInput = z.infer<typeof createComplaintSchema>;
 export type CreateSanctionInput = z.infer<typeof createSanctionSchema>;
 export type CreateAuditInput = z.infer<typeof createAuditSchema>;
 export type CreateDecisionInput = z.infer<typeof createDecisionSchema>;
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type CreateNotificationInput = z.infer<typeof createNotificationSchema>;
+export type MarkNotificationsReadInput = z.infer<typeof markNotificationsReadSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
