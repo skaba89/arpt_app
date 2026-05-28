@@ -52,6 +52,7 @@ model Operator {
   complaints  Complaint[]
   sanctions   Sanction[]
   audits      Audit[]
+  regions     RegionOperator[]
 }
 
 model QosReport {
@@ -217,4 +218,25 @@ model Region {
   coverage        Float?              // Coverage percentage
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  operators       RegionOperator[]
+}
+
+model RegionOperator {
+  id          String   @id @default(cuid())
+  regionId    String
+  region      Region   @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  operatorId  String
+  operator    Operator @relation(fields: [operatorId], references: [id])
+  active      Boolean  @default(true)
+  coverage2G  Float?   // 2G coverage percentage
+  coverage3G  Float?   // 3G coverage percentage
+  coverage4G  Float?   // 4G coverage percentage
+  qosScore    Float?   // QoS score for this operator in this region
+  subscriberCount Int? // Number of subscribers
+  siteCount   Int?     // Number of cell sites/antennas
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([regionId, operatorId])
 }

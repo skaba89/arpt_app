@@ -33,9 +33,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Search, MessageSquareWarning, Eye } from 'lucide-react'
+import { Plus, Search, MessageSquareWarning, Eye, Upload } from 'lucide-react'
 import { apiClient, ApiError } from '@/lib/api-client'
 import { FileUpload } from '@/components/file-upload'
+import { ImportDialog, ImportType } from '@/components/import-dialog'
 
 interface Operator {
   id: string
@@ -98,6 +99,9 @@ export default function ComplaintsPage() {
   // Detail dialog state
   const [detailComplaint, setDetailComplaint] = useState<Complaint | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+
+  // Import dialog state
+  const [importOpen, setImportOpen] = useState(false)
 
   // Form state
   const [formTitle, setFormTitle] = useState('')
@@ -203,12 +207,22 @@ export default function ComplaintsPage() {
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nouvelle plainte
+          <div className="flex gap-2">
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nouvelle plainte
+              </Button>
+            </DialogTrigger>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+              Importer
             </Button>
-          </DialogTrigger>
+          </div>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Enregistrer une plainte</DialogTitle>
@@ -534,6 +548,14 @@ export default function ComplaintsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Import dialog */}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        importType="complaints"
+        onSuccess={loadData}
+      />
     </div>
   )
 }

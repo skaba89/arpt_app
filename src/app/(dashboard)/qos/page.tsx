@@ -32,9 +32,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Activity, Phone, Wifi, Clock, TrendingUp, TrendingDown, Minus, Plus, Eye } from 'lucide-react'
+import { Activity, Phone, Wifi, Clock, TrendingUp, TrendingDown, Minus, Plus, Eye, Upload } from 'lucide-react'
 import { apiClient, ApiError } from '@/lib/api-client'
 import { FileUpload } from '@/components/file-upload'
+import { ImportDialog, ImportType } from '@/components/import-dialog'
 
 interface Operator {
   id: string
@@ -96,6 +97,9 @@ export default function QosPage() {
   // Detail dialog state
   const [detailReport, setDetailReport] = useState<QosReport | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+
+  // Import dialog state
+  const [importOpen, setImportOpen] = useState(false)
 
   // Form state
   const [formOperatorId, setFormOperatorId] = useState('')
@@ -200,12 +204,22 @@ export default function QosPage() {
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nouveau rapport
+          <div className="flex gap-2">
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nouveau rapport
+              </Button>
+            </DialogTrigger>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+              Importer
             </Button>
-          </DialogTrigger>
+          </div>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Nouveau rapport QoS</DialogTitle>
@@ -558,6 +572,14 @@ export default function QosPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Import dialog */}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        importType="qos"
+        onSuccess={loadData}
+      />
     </div>
   )
 }

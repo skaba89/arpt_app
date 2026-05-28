@@ -72,6 +72,62 @@ async function main() {
   }
   console.log(`Created ${operators.length} operators`);
 
+  // ── Region-Operator Coverage Data ──────────────────
+  const regionOperatorsData = [
+    // Conakry - all 4 operators
+    { regionCode: "CK", operatorCode: "ORG", coverage2G: 99, coverage3G: 97, coverage4G: 92, qosScore: 88, subscriberCount: 850000, siteCount: 450 },
+    { regionCode: "CK", operatorCode: "MTN", coverage2G: 98, coverage3G: 95, coverage4G: 88, qosScore: 82, subscriberCount: 720000, siteCount: 380 },
+    { regionCode: "CK", operatorCode: "CEL", coverage2G: 95, coverage3G: 90, coverage4G: 75, qosScore: 75, subscriberCount: 350000, siteCount: 220 },
+    { regionCode: "CK", operatorCode: "GTC", coverage2G: 90, coverage3G: 70, coverage4G: 30, qosScore: 65, subscriberCount: 120000, siteCount: 85 },
+    // Kindia - 3 operators
+    { regionCode: "KD", operatorCode: "ORG", coverage2G: 92, coverage3G: 80, coverage4G: 55, qosScore: 78, subscriberCount: 280000, siteCount: 180 },
+    { regionCode: "KD", operatorCode: "MTN", coverage2G: 88, coverage3G: 72, coverage4G: 45, qosScore: 72, subscriberCount: 220000, siteCount: 150 },
+    { regionCode: "KD", operatorCode: "CEL", coverage2G: 80, coverage3G: 60, coverage4G: 25, qosScore: 62, subscriberCount: 95000, siteCount: 85 },
+    // Boké - 2 operators
+    { regionCode: "BK", operatorCode: "ORG", coverage2G: 78, coverage3G: 55, coverage4G: 25, qosScore: 65, subscriberCount: 150000, siteCount: 95 },
+    { regionCode: "BK", operatorCode: "MTN", coverage2G: 72, coverage3G: 48, coverage4G: 18, qosScore: 58, subscriberCount: 110000, siteCount: 72 },
+    // Labé - 2 operators
+    { regionCode: "LB", operatorCode: "ORG", coverage2G: 75, coverage3G: 50, coverage4G: 20, qosScore: 60, subscriberCount: 130000, siteCount: 80 },
+    { regionCode: "LB", operatorCode: "MTN", coverage2G: 70, coverage3G: 42, coverage4G: 15, qosScore: 55, subscriberCount: 95000, siteCount: 65 },
+    // Mamou - 2 operators
+    { regionCode: "MM", operatorCode: "ORG", coverage2G: 82, coverage3G: 58, coverage4G: 28, qosScore: 68, subscriberCount: 140000, siteCount: 90 },
+    { regionCode: "MM", operatorCode: "MTN", coverage2G: 75, coverage3G: 50, coverage4G: 20, qosScore: 60, subscriberCount: 100000, siteCount: 70 },
+    // Faranah - 1 operator
+    { regionCode: "FR", operatorCode: "ORG", coverage2G: 60, coverage3G: 30, coverage4G: 8, qosScore: 45, subscriberCount: 75000, siteCount: 45 },
+    // Kankan - 3 operators
+    { regionCode: "KN", operatorCode: "ORG", coverage2G: 85, coverage3G: 65, coverage4G: 35, qosScore: 72, subscriberCount: 250000, siteCount: 160 },
+    { regionCode: "KN", operatorCode: "MTN", coverage2G: 80, coverage3G: 58, coverage4G: 28, qosScore: 65, subscriberCount: 200000, siteCount: 130 },
+    { regionCode: "KN", operatorCode: "CEL", coverage2G: 72, coverage3G: 45, coverage4G: 12, qosScore: 55, subscriberCount: 80000, siteCount: 55 },
+    // N'Zérékoré - 2 operators
+    { regionCode: "NZ", operatorCode: "ORG", coverage2G: 65, coverage3G: 38, coverage4G: 12, qosScore: 52, subscriberCount: 120000, siteCount: 70 },
+    { regionCode: "NZ", operatorCode: "MTN", coverage2G: 58, coverage3G: 30, coverage4G: 8, qosScore: 48, subscriberCount: 85000, siteCount: 52 },
+  ];
+
+  for (const ro of regionOperatorsData) {
+    const region = await prisma.region.findUnique({ where: { code: ro.regionCode } });
+    const operator = await prisma.operator.findUnique({ where: { code: ro.operatorCode } });
+    if (region && operator) {
+      await prisma.regionOperator.upsert({
+        where: {
+          regionId_operatorId: { regionId: region.id, operatorId: operator.id },
+        },
+        update: {},
+        create: {
+          regionId: region.id,
+          operatorId: operator.id,
+          active: true,
+          coverage2G: ro.coverage2G,
+          coverage3G: ro.coverage3G,
+          coverage4G: ro.coverage4G,
+          qosScore: ro.qosScore,
+          subscriberCount: ro.subscriberCount,
+          siteCount: ro.siteCount,
+        },
+      });
+    }
+  }
+  console.log(`Created ${regionOperatorsData.length} region-operator entries`);
+
   // ── QoS Reports ────────────────────────────────────
   const orangeOp = await prisma.operator.findUnique({ where: { code: "ORG" } });
   const mtnOp = await prisma.operator.findUnique({ where: { code: "MTN" } });
@@ -98,7 +154,11 @@ async function main() {
     ];
 
     for (const complaint of complaints) {
-      await prisma.complaint.create({ data: complaint });
+      await prisma.complaint.upsert({
+        where: { reference: complaint.reference },
+        update: {},
+        create: complaint,
+      });
     }
     console.log(`Created ${complaints.length} complaints`);
   }
@@ -111,7 +171,11 @@ async function main() {
     ];
 
     for (const sanction of sanctions) {
-      await prisma.sanction.create({ data: sanction });
+      await prisma.sanction.upsert({
+        where: { reference: sanction.reference },
+        update: {},
+        create: sanction,
+      });
     }
     console.log(`Created ${sanctions.length} sanctions`);
   }
@@ -124,7 +188,11 @@ async function main() {
     ];
 
     for (const audit of audits) {
-      await prisma.audit.create({ data: audit });
+      await prisma.audit.upsert({
+        where: { reference: audit.reference },
+        update: {},
+        create: audit,
+      });
     }
     console.log(`Created ${audits.length} audits`);
   }
@@ -136,7 +204,11 @@ async function main() {
   ];
 
   for (const decision of decisions) {
-    await prisma.decision.create({ data: decision });
+    await prisma.decision.upsert({
+      where: { reference: decision.reference },
+      update: {},
+      create: decision,
+    });
   }
   console.log(`Created ${decisions.length} decisions`);
 

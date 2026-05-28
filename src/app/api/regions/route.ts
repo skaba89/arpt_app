@@ -6,6 +6,15 @@ export const GET = apiHandler({
   handler: async () => {
     const regions = await db.region.findMany({
       orderBy: { name: "asc" },
+      include: {
+        operators: {
+          include: {
+            operator: {
+              select: { id: true, name: true, code: true },
+            },
+          },
+        },
+      },
     });
 
     return NextResponse.json({

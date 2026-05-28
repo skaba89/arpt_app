@@ -1,0 +1,4 @@
+operator_code,period,region,call_success_rate,drop_rate,sms_success_rate,data_throughput,latency,overall_score
+ORG,2025-Q2,Conakry,95.5,1.8,98.2,28.5,42,90
+MTN,2025-Q2,Conakry,92.3,2.9,96.8,24.1,48,85
+CEL,2025-Q2,Conakry,88.1,4.5,94.2,19.3,58,76

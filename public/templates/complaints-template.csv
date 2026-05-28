@@ -1,0 +1,3 @@
+title,description,category,priority,operator_code,complainant_name,complainant_phone
+"Pertes d'appels","Appels coupés depuis 2 semaines",qualite_service,high,ORG,"Mamady Diallo","+224622000001"
+"Facturation excessive","Consommation data anormale",facturation,medium,MTN,"Fatoumata Bary","+224628000002"
