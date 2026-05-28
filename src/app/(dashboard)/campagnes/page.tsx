@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -46,6 +47,14 @@ import {
   PlayCircle,
   FileText,
   BarChart3,
+  Package,
+  Building2,
+  CircleDot,
+  ArrowRight,
+  Lock,
+  Eye,
+  AlertCircle,
+  Upload,
 } from 'lucide-react'
 
 interface Campaign {
@@ -55,6 +64,7 @@ interface Campaign {
   description: string | null
   type: string
   status: string
+  phase: string
   startDate: string | null
   endDate: string | null
   regions: string | null
@@ -63,6 +73,7 @@ interface Campaign {
   services: string | null
   teamSize: number | null
   equipment: string | null
+  cabinetName: string | null
   totalTests: number
   conformRate: number | null
   createdAt: string
@@ -99,11 +110,66 @@ interface Measurement {
   operator: { id: string; name: string; code: string } | null
 }
 
+interface Deliverable {
+  id: string
+  type: string
+  title: string
+  description: string | null
+  status: string
+  confidentiality: string
+  dueDate: string | null
+  submittedDate: string | null
+  filename: string | null
+  createdAt: string
+}
+
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ComponentType<{ className?: string }> }> = {
   planned: { label: 'Planifiée', variant: 'outline', icon: Clock },
+  preparation: { label: 'Préparation', variant: 'outline', icon: Clock },
   in_progress: { label: 'En cours', variant: 'default', icon: PlayCircle },
+  field_work: { label: 'Travail terrain', variant: 'default', icon: PlayCircle },
+  analysis: { label: 'Analyse', variant: 'default', icon: BarChart3 },
+  reporting: { label: 'Rapportage', variant: 'default', icon: FileText },
   completed: { label: 'Terminée', variant: 'secondary', icon: CheckCircle2 },
   cancelled: { label: 'Annulée', variant: 'destructive', icon: XCircle },
+}
+
+const phaseConfig: Record<string, { label: string; color: string; bgColor: string }> = {
+  planning: { label: 'Planification', color: 'text-gray-600', bgColor: 'bg-gray-100' },
+  preparation: { label: 'Préparation', color: 'text-blue-600', bgColor: 'bg-blue-100' },
+  field_work: { label: 'Travail terrain', color: 'text-orange-600', bgColor: 'bg-orange-100' },
+  analysis: { label: 'Analyse', color: 'text-purple-600', bgColor: 'bg-purple-100' },
+  reporting: { label: 'Rapportage', color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
+  closed: { label: 'Clôturée', color: 'text-gray-800', bgColor: 'bg-gray-200' },
+}
+
+const phaseOrder = ['planning', 'preparation', 'field_work', 'analysis', 'reporting', 'closed']
+
+const deliverableTypeConfig: Record<string, string> = {
+  methodological_note: 'Note méthodologique',
+  sampling_plan: "Plan d'échantillonnage",
+  raw_data: 'Données brutes',
+  coverage_map: 'Cartographie',
+  technical_report: 'Rapport technique',
+  benchmark_report: 'Rapport benchmark',
+  ppt_presentation: 'Présentation PPT',
+  digital_support: 'Support numérique',
+  results_presentation: 'Présentation résultats',
+}
+
+const deliverableStatusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ComponentType<{ className?: string }> }> = {
+  pending: { label: 'En attente', variant: 'outline', icon: Clock },
+  in_progress: { label: 'En cours', variant: 'default', icon: PlayCircle },
+  submitted: { label: 'Soumis', variant: 'secondary', icon: Upload },
+  reviewed: { label: 'Révisé', variant: 'secondary', icon: Eye },
+  approved: { label: 'Approuvé', variant: 'default', icon: CheckCircle2 },
+  rejected: { label: 'Rejeté', variant: 'destructive', icon: XCircle },
+}
+
+const confidentialityConfig: Record<string, { label: string; className: string }> = {
+  confidential: { label: 'Confidentiel', className: 'bg-red-100 text-red-700 border-red-200' },
+  restricted: { label: 'Restreint', className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  public: { label: 'Public', className: 'bg-green-100 text-green-700 border-green-200' },
 }
 
 const typeConfig: Record<string, string> = {
@@ -132,6 +198,8 @@ export default function CampagnesPage() {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
   const [measurements, setMeasurements] = useState<Measurement[]>([])
   const [measurementsLoading, setMeasurementsLoading] = useState(false)
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([])
+  const [deliverablesLoading, setDeliverablesLoading] = useState(false)
 
   // Form state
   const [formRef, setFormRef] = useState('')
@@ -179,10 +247,25 @@ export default function CampagnesPage() {
     }
   }, [])
 
+  const fetchDeliverables = useCallback(async (campaignId: string) => {
+    try {
+      setDeliverablesLoading(true)
+      const res = await fetch(`/api/deliverables?campaignId=${campaignId}&limit=50`)
+      if (!res.ok) throw new Error('Erreur réseau')
+      const data = await res.json()
+      setDeliverables(data.deliverables || [])
+    } catch {
+      setDeliverables([])
+    } finally {
+      setDeliverablesLoading(false)
+    }
+  }, [])
+
   const openDetail = (campaign: Campaign) => {
     setSelectedCampaign(campaign)
     setDetailDialogOpen(true)
     fetchMeasurements(campaign.id)
+    fetchDeliverables(campaign.id)
   }
 
   const handleCreate = async () => {
@@ -302,6 +385,62 @@ export default function CampagnesPage() {
     return codes.split(',').map((c) => regionNames[c] || c).join(', ')
   }
 
+  // Phase progress component
+  const PhaseProgressBar = ({ currentPhase }: { currentPhase: string }) => {
+    const currentIndex = phaseOrder.indexOf(currentPhase)
+    return (
+      <div className="w-full">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium">Cycle de vie DAO</span>
+          <span className="text-xs text-muted-foreground">
+            Phase {currentIndex + 1} / {phaseOrder.length}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {phaseOrder.map((phase, idx) => {
+            const config = phaseConfig[phase]
+            const isCompleted = idx < currentIndex
+            const isCurrent = idx === currentIndex
+            const isFuture = idx > currentIndex
+            return (
+              <React.Fragment key={phase}>
+                <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+                  <div
+                    className={`w-full h-2 rounded-full transition-all ${
+                      isCompleted
+                        ? 'bg-emerald-500'
+                        : isCurrent
+                        ? 'bg-blue-500 animate-pulse'
+                        : 'bg-gray-200'
+                    }`}
+                  />
+                  <span
+                    className={`text-[10px] leading-tight text-center truncate w-full ${
+                      isCompleted
+                        ? 'text-emerald-600 font-medium'
+                        : isCurrent
+                        ? 'text-blue-600 font-semibold'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    {config.label}
+                  </span>
+                </div>
+                {idx < phaseOrder.length - 1 && (
+                  <ArrowRight
+                    className={`h-3 w-3 flex-shrink-0 ${
+                      idx < currentIndex ? 'text-emerald-500' : 'text-gray-300'
+                    }`}
+                  />
+                )}
+              </React.Fragment>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -373,7 +512,11 @@ export default function CampagnesPage() {
               <SelectContent>
                 <SelectItem value="all">Tous les statuts</SelectItem>
                 <SelectItem value="planned">Planifiée</SelectItem>
+                <SelectItem value="preparation">Préparation</SelectItem>
                 <SelectItem value="in_progress">En cours</SelectItem>
+                <SelectItem value="field_work">Travail terrain</SelectItem>
+                <SelectItem value="analysis">Analyse</SelectItem>
+                <SelectItem value="reporting">Rapportage</SelectItem>
                 <SelectItem value="completed">Terminée</SelectItem>
                 <SelectItem value="cancelled">Annulée</SelectItem>
               </SelectContent>
@@ -405,6 +548,7 @@ export default function CampagnesPage() {
                     <TableHead>Nom</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Statut</TableHead>
+                    <TableHead>Phase</TableHead>
                     <TableHead className="hidden md:table-cell">Période</TableHead>
                     <TableHead className="hidden lg:table-cell">Régions</TableHead>
                     <TableHead className="text-center">Mesures</TableHead>
@@ -415,6 +559,7 @@ export default function CampagnesPage() {
                   {filtered.map((c) => {
                     const sc = statusConfig[c.status] || statusConfig.planned
                     const StatusIcon = sc.icon
+                    const pc = phaseConfig[c.phase] || phaseConfig.planning
                     return (
                       <TableRow
                         key={c.id}
@@ -431,6 +576,12 @@ export default function CampagnesPage() {
                             <StatusIcon className="h-3 w-3" />
                             {sc.label}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${pc.bgColor} ${pc.color}`}>
+                            <CircleDot className="h-3 w-3" />
+                            {pc.label}
+                          </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-sm">
                           {formatDate(c.startDate)} — {formatDate(c.endDate)}
@@ -543,7 +694,7 @@ export default function CampagnesPage() {
 
           {selectedCampaign && (
             <Tabs defaultValue="details" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="details" className="gap-1">
                   <FileText className="h-3.5 w-3.5" />
                   Détails
@@ -556,10 +707,17 @@ export default function CampagnesPage() {
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Conformité
                 </TabsTrigger>
+                <TabsTrigger value="livrables" className="gap-1">
+                  <Package className="h-3.5 w-3.5" />
+                  Livrables
+                </TabsTrigger>
               </TabsList>
 
               <div className="mt-4 max-h-[55vh] overflow-y-auto">
                 <TabsContent value="details" className="space-y-4">
+                  {/* Phase Progress Bar */}
+                  <PhaseProgressBar currentPhase={selectedCampaign.phase} />
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
@@ -587,6 +745,14 @@ export default function CampagnesPage() {
                           <strong>Équipe :</strong> {selectedCampaign.teamSize || '—'} personnes
                         </span>
                       </div>
+                      {selectedCampaign.cabinetName && (
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            <strong>Cabinet :</strong> {selectedCampaign.cabinetName}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-3">
                       <div>
@@ -598,6 +764,13 @@ export default function CampagnesPage() {
                         <Badge variant={statusConfig[selectedCampaign.status]?.variant || 'outline'}>
                           {statusConfig[selectedCampaign.status]?.label || selectedCampaign.status}
                         </Badge>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium">Phase :</span>{' '}
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${phaseConfig[selectedCampaign.phase]?.bgColor || 'bg-gray-100'} ${phaseConfig[selectedCampaign.phase]?.color || 'text-gray-600'}`}>
+                          <CircleDot className="h-3 w-3" />
+                          {phaseConfig[selectedCampaign.phase]?.label || selectedCampaign.phase}
+                        </span>
                       </div>
                       <div>
                         <span className="text-sm font-medium">Services :</span>{' '}
@@ -751,6 +924,92 @@ export default function CampagnesPage() {
                       </>
                     )
                   })()}
+                </TabsContent>
+
+                <TabsContent value="livrables" className="space-y-4">
+                  {deliverablesLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+                    </div>
+                  ) : deliverables.length === 0 ? (
+                    <div className="flex flex-col items-center py-8 text-muted-foreground">
+                      <Package className="h-8 w-8 mb-2" />
+                      <p>Aucun livrable enregistré pour cette campagne</p>
+                      <p className="text-xs mt-1">Les livrables DAO N°002/ARPT/DCT/2025 apparaîtront ici</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Deliverables summary */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <Card className="p-3">
+                          <p className="text-xs text-muted-foreground">Total livrables</p>
+                          <p className="text-lg font-bold">{deliverables.length}</p>
+                        </Card>
+                        <Card className="p-3">
+                          <p className="text-xs text-muted-foreground">Approuvés</p>
+                          <p className="text-lg font-bold text-emerald-600">
+                            {deliverables.filter(d => d.status === 'approved').length}
+                          </p>
+                        </Card>
+                        <Card className="p-3">
+                          <p className="text-xs text-muted-foreground">En attente</p>
+                          <p className="text-lg font-bold text-yellow-600">
+                            {deliverables.filter(d => d.status === 'pending').length}
+                          </p>
+                        </Card>
+                        <Card className="p-3">
+                          <p className="text-xs text-muted-foreground">En cours</p>
+                          <p className="text-lg font-bold text-blue-600">
+                            {deliverables.filter(d => d.status === 'in_progress' || d.status === 'submitted').length}
+                          </p>
+                        </Card>
+                      </div>
+
+                      {/* Deliverables checklist */}
+                      <div className="space-y-2">
+                        {deliverables.map((d) => {
+                          const dsc = deliverableStatusConfig[d.status] || deliverableStatusConfig.pending
+                          const DIcon = dsc.icon
+                          const cc = confidentialityConfig[d.confidentiality] || confidentialityConfig.confidential
+                          return (
+                            <div
+                              key={d.id}
+                              className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors"
+                            >
+                              <Checkbox
+                                checked={d.status === 'approved' || d.status === 'submitted' || d.status === 'reviewed'}
+                                className="pointer-events-none"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-sm">{d.title}</span>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {deliverableTypeConfig[d.type] || d.type}
+                                  </Badge>
+                                  <Badge variant={dsc.variant} className="gap-1 text-[10px]">
+                                    <DIcon className="h-3 w-3" />
+                                    {dsc.label}
+                                  </Badge>
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${cc.className}`}>
+                                    <Lock className="h-2.5 w-2.5" />
+                                    {cc.label}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                                  {d.dueDate && (
+                                    <span>Échéance : {formatDate(d.dueDate)}</span>
+                                  )}
+                                  {d.submittedDate && (
+                                    <span>Soumis : {formatDate(d.submittedDate)}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
                 </TabsContent>
               </div>
             </Tabs>

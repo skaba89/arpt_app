@@ -8,6 +8,7 @@ const campaignCreateSchema = z.object({
   description: z.string().optional(),
   type: z.enum(["drive_test", "walk_test", "fixed_test", "combined"]),
   status: z.enum(["planned", "in_progress", "completed", "cancelled"]).optional().default("planned"),
+  phase: z.enum(["planning", "preparation", "field_work", "analysis", "reporting", "closed"]).optional().default("planning"),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   regions: z.string().optional(),
@@ -16,6 +17,7 @@ const campaignCreateSchema = z.object({
   services: z.string().optional(),
   teamSize: z.number().int().optional(),
   equipment: z.string().optional(),
+  cabinetName: z.string().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest) {
         description: validated.description,
         type: validated.type,
         status: validated.status,
+        phase: validated.phase,
         startDate: validated.startDate ? new Date(validated.startDate) : null,
         endDate: validated.endDate ? new Date(validated.endDate) : null,
         regions: validated.regions,
@@ -98,6 +101,7 @@ export async function POST(request: NextRequest) {
         services: validated.services,
         teamSize: validated.teamSize,
         equipment: validated.equipment,
+        cabinetName: validated.cabinetName,
       },
     });
 
