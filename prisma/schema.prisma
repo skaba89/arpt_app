@@ -31,6 +31,7 @@ model User {
   sanctions         Sanction[]
   decisionsCreated  Decision[]       @relation("DecisionCreatedBy")
   decisionsDecided  Decision[]       @relation("DecisionDecidedBy")
+  documents         Document[]
 }
 
 model Operator {
@@ -178,4 +179,42 @@ model AuditLog {
   userName    String?
   ipAddress   String?
   createdAt   DateTime @default(now())
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  filename    String               // Original filename
+  mimeType    String               // MIME type
+  size        Int                  // File size in bytes
+  path        String               // Storage path
+  category    String?              // rapport, piece_jointe, decision, audit, autre
+  description String?              // Optional description
+
+  // Polymorphic relation - can belong to any entity
+  entityId    String               // ID of the parent entity
+  entityType  String               // "complaint", "audit", "decision", "qos", "sanction", "operator"
+
+  uploadedById String?             // User who uploaded
+  uploadedBy  User?   @relation(fields: [uploadedById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([entityId, entityType])
+}
+
+model Region {
+  id              String   @id @default(cuid())
+  name            String   @unique    // Conakry, Kindia, Boké, Labé, Mamou, Faranah, Kankan, N'Zérékoré
+  code            String   @unique    // CK, KD, BK, LB, MM, FR, KN, NZ
+  latitude        Float               // Center latitude
+  longitude       Float               // Center longitude
+  population      Int?                // Approximate population
+  area            Float?              // Area in km2
+  activeOperators Int      @default(0) // Number of active operators
+  qosScore        Float?              // Average QoS score
+  complaintCount  Int      @default(0) // Number of complaints
+  coverage        Float?              // Coverage percentage
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

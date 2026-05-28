@@ -43,23 +43,27 @@ import {
   Gavel,
   ClipboardCheck,
   ScrollText,
+  FileText,
   Settings,
   LogOut,
   ChevronUp,
   Shield,
   Bell,
   Check,
+  Map,
 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 
 const navItems = [
   { title: 'Tableau de bord', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Carte', href: '/carte', icon: Map },
   { title: 'Opérateurs', href: '/operators', icon: Building2 },
   { title: 'QoS', href: '/qos', icon: Activity },
   { title: 'Plaintes', href: '/complaints', icon: MessageSquareWarning },
   { title: 'Sanctions', href: '/sanctions', icon: Gavel },
   { title: 'Audits', href: '/audits', icon: ClipboardCheck },
   { title: 'Décisions', href: '/decisions', icon: ScrollText },
+  { title: 'Documents', href: '/documents', icon: FileText },
 ]
 
 const settingsItems = [

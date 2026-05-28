@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -31,8 +32,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Activity, Phone, Wifi, Clock, TrendingUp, TrendingDown, Minus, Plus } from 'lucide-react'
+import { Activity, Phone, Wifi, Clock, TrendingUp, TrendingDown, Minus, Plus, Eye } from 'lucide-react'
 import { apiClient, ApiError } from '@/lib/api-client'
+import { FileUpload } from '@/components/file-upload'
 
 interface Operator {
   id: string
@@ -90,6 +92,10 @@ export default function QosPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  // Detail dialog state
+  const [detailReport, setDetailReport] = useState<QosReport | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   // Form state
   const [formOperatorId, setFormOperatorId] = useState('')
@@ -167,6 +173,11 @@ export default function QosPage() {
     setFormLatency('')
     setFormOverallScore('')
     setFormError(null)
+  }
+
+  const openDetail = (report: QosReport) => {
+    setDetailReport(report)
+    setDetailOpen(true)
   }
 
   // Get the latest report per operator for the card view
@@ -284,7 +295,7 @@ export default function QosPage() {
           ))
         ) : latestReports.length > 0 ? (
           latestReports.map((report) => (
-            <Card key={report.id} className="relative overflow-hidden">
+            <Card key={report.id} className="relative overflow-hidden cursor-pointer" onClick={() => openDetail(report)}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">{report.operator?.name || 'N/A'}</CardTitle>
@@ -415,20 +426,21 @@ export default function QosPage() {
                   <TableHead className="text-center">Latence (ms)</TableHead>
                   <TableHead className="text-center">Score</TableHead>
                   <TableHead>Statut</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 9 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : reports.length > 0 ? (
                   reports.map((report) => (
-                    <TableRow key={report.id}>
+                    <TableRow key={report.id} className="cursor-pointer" onClick={() => openDetail(report)}>
                       <TableCell className="font-medium">{report.operator?.name || 'N/A'}</TableCell>
                       <TableCell>{report.period}</TableCell>
                       <TableCell className="text-center">
@@ -461,11 +473,16 @@ export default function QosPage() {
                           {report.status === 'reviewed' ? 'Vérifié' : 'Brouillon'}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); openDetail(report) }}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                       Aucun rapport QoS trouvé
                     </TableCell>
                   </TableRow>
@@ -475,6 +492,72 @@ export default function QosPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detail dialog with documents */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          {detailReport && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  Rapport QoS — {detailReport.operator?.name || 'N/A'}
+                </DialogTitle>
+                <DialogDescription>Période : {detailReport.period}</DialogDescription>
+              </DialogHeader>
+
+              <Tabs defaultValue="details" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="details">Détails</TabsTrigger>
+                  <TabsTrigger value="documents">Documents</TabsTrigger>
+                </TabsList>
+                <TabsContent value="details" className="space-y-4 mt-4">
+                  <div className={`flex items-center justify-between rounded-lg p-4 ${detailReport.overallScore ? getScoreBg(detailReport.overallScore) : 'bg-muted'}`}>
+                    <span className="text-sm font-medium">Score global</span>
+                    <span className={`text-3xl font-bold ${detailReport.overallScore ? getScoreColor(detailReport.overallScore) : 'text-muted-foreground'}`}>
+                      {detailReport.overallScore !== null ? `${detailReport.overallScore}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Taux d&apos;appel abouti</p>
+                      <p className="text-lg font-semibold">{detailReport.callSuccessRate !== null ? `${detailReport.callSuccessRate}%` : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Taux d&apos;appel coupé</p>
+                      <p className="text-lg font-semibold">{detailReport.dropRate !== null ? `${detailReport.dropRate}%` : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Débit data</p>
+                      <p className="text-lg font-semibold">{detailReport.dataThroughput !== null ? `${detailReport.dataThroughput} Mbps` : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Latence</p>
+                      <p className="text-lg font-semibold">{detailReport.latency !== null ? `${detailReport.latency} ms` : '—'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Statut</p>
+                    <Badge variant={detailReport.status === 'reviewed' ? 'default' : 'outline'}>
+                      {detailReport.status === 'reviewed' ? 'Vérifié' : 'Brouillon'}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Date de création</p>
+                    <p className="text-sm font-medium">{new Date(detailReport.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                  </div>
+                </TabsContent>
+                <TabsContent value="documents" className="mt-4">
+                  <FileUpload
+                    entityId={detailReport.id}
+                    entityType="qos"
+                    category="rapport"
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -6,6 +6,26 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding database...");
 
+  // ── Regions ──────────────────────────────────────────
+  const regions = [
+    { name: "Conakry", code: "CK", latitude: 9.5092, longitude: -13.7122, population: 2076609, area: 450, activeOperators: 4, qosScore: 83.8, complaintCount: 12, coverage: 95 },
+    { name: "Kindia", code: "KD", latitude: 10.0667, longitude: -12.8667, population: 1843043, area: 28533, activeOperators: 3, qosScore: 75.2, complaintCount: 5, coverage: 78 },
+    { name: "Boké", code: "BK", latitude: 11.1833, longitude: -14.2833, population: 1098475, area: 31118, activeOperators: 2, qosScore: 62.5, complaintCount: 8, coverage: 55 },
+    { name: "Labé", code: "LB", latitude: 11.3167, longitude: -12.3000, population: 1248012, area: 22729, activeOperators: 2, qosScore: 58.3, complaintCount: 6, coverage: 50 },
+    { name: "Mamou", code: "MM", latitude: 10.3833, longitude: -12.0833, population: 1034284, area: 8038, activeOperators: 2, qosScore: 65.1, complaintCount: 4, coverage: 62 },
+    { name: "Faranah", code: "FR", latitude: 10.0333, longitude: -10.7500, population: 939806, area: 35581, activeOperators: 1, qosScore: 45.7, complaintCount: 9, coverage: 35 },
+    { name: "Kankan", code: "KN", latitude: 10.3833, longitude: -9.3000, population: 1999307, area: 72256, activeOperators: 3, qosScore: 68.4, complaintCount: 7, coverage: 70 },
+    { name: "N'Zérékoré", code: "NZ", latitude: 7.7500, longitude: -8.8167, population: 1865061, area: 38841, activeOperators: 2, qosScore: 52.1, complaintCount: 11, coverage: 42 },
+  ];
+  for (const r of regions) {
+    await prisma.region.upsert({
+      where: { code: r.code },
+      update: {},
+      create: r,
+    });
+  }
+  console.log(`Created ${regions.length} regions`);
+
   // ── Users ──────────────────────────────────────────
   const users = [
     { email: "superadmin@arpt.gn", name: "Super Administrateur", role: "super_admin", password: "SuperAdmin@2025" },

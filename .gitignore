@@ -10,3 +10,4 @@ playwright-report/
 arpt-app/
 db/custom.db
 next-env.d.ts
+uploads/

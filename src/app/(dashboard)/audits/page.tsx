@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -14,8 +15,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ClipboardCheck, Search } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ClipboardCheck, Search, Eye } from 'lucide-react'
 import { apiClient, ApiError } from '@/lib/api-client'
+import { FileUpload } from '@/components/file-upload'
 
 interface Operator {
   id: string
@@ -34,6 +43,8 @@ interface Audit {
   endDate: string | null
   operatorId: string | null
   operator?: Operator | null
+  findings: string | null
+  recommendations: string | null
   createdAt: string
 }
 
@@ -62,6 +73,8 @@ export default function AuditsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [detailAudit, setDetailAudit] = useState<Audit | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const loadAudits = useCallback(async () => {
     try {
@@ -89,6 +102,11 @@ export default function AuditsPage() {
   useEffect(() => {
     loadAudits()
   }, [loadAudits])
+
+  const openDetail = (audit: Audit) => {
+    setDetailAudit(audit)
+    setDetailOpen(true)
+  }
 
   const filtered = audits.filter(
     (a) =>
@@ -183,20 +201,21 @@ export default function AuditsPage() {
                   <TableHead>Opérateur</TableHead>
                   <TableHead>Date de début</TableHead>
                   <TableHead>Statut</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : filtered.length > 0 ? (
                   filtered.map((audit) => (
-                    <TableRow key={audit.id}>
+                    <TableRow key={audit.id} className="cursor-pointer" onClick={() => openDetail(audit)}>
                       <TableCell>
                         <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
                           {audit.reference}
@@ -227,11 +246,16 @@ export default function AuditsPage() {
                           {statusMap[audit.status]?.label || audit.status}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); openDetail(audit) }}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                       Aucun audit trouvé
                     </TableCell>
                   </TableRow>
@@ -241,6 +265,83 @@ export default function AuditsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detail dialog with documents */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          {detailAudit && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <code className="rounded bg-muted px-2 py-0.5 text-sm font-medium">
+                    {detailAudit.reference}
+                  </code>
+                  {detailAudit.title}
+                </DialogTitle>
+                <DialogDescription>Détails de l&apos;audit</DialogDescription>
+              </DialogHeader>
+
+              <Tabs defaultValue="details" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="details">Détails</TabsTrigger>
+                  <TabsTrigger value="documents">Documents</TabsTrigger>
+                </TabsList>
+                <TabsContent value="details" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Type</p>
+                      <Badge variant={typeMap[detailAudit.type]?.variant} className={typeMap[detailAudit.type]?.className}>
+                        {typeMap[detailAudit.type]?.label || detailAudit.type}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Statut</p>
+                      <Badge variant={statusMap[detailAudit.status]?.variant} className={statusMap[detailAudit.status]?.className}>
+                        {statusMap[detailAudit.status]?.label || detailAudit.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Opérateur</p>
+                      <p className="text-sm font-medium">{detailAudit.operator?.name || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Période</p>
+                      <p className="text-sm font-medium">
+                        {detailAudit.startDate ? new Date(detailAudit.startDate).toLocaleDateString('fr-FR') : '—'}
+                        {' → '}
+                        {detailAudit.endDate ? new Date(detailAudit.endDate).toLocaleDateString('fr-FR') : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Description</p>
+                    <p className="text-sm mt-1">{detailAudit.description}</p>
+                  </div>
+                  {detailAudit.findings && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Constats</p>
+                      <p className="text-sm mt-1">{detailAudit.findings}</p>
+                    </div>
+                  )}
+                  {detailAudit.recommendations && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Recommandations</p>
+                      <p className="text-sm mt-1">{detailAudit.recommendations}</p>
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="documents" className="mt-4">
+                  <FileUpload
+                    entityId={detailAudit.id}
+                    entityType="audit"
+                    category="audit"
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

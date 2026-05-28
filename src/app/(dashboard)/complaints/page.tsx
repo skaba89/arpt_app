@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -32,8 +33,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Search, MessageSquareWarning } from 'lucide-react'
+import { Plus, Search, MessageSquareWarning, Eye } from 'lucide-react'
 import { apiClient, ApiError } from '@/lib/api-client'
+import { FileUpload } from '@/components/file-upload'
 
 interface Operator {
   id: string
@@ -92,6 +94,10 @@ export default function ComplaintsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+
+  // Detail dialog state
+  const [detailComplaint, setDetailComplaint] = useState<Complaint | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   // Form state
   const [formTitle, setFormTitle] = useState('')
@@ -172,6 +178,11 @@ export default function ComplaintsPage() {
     setFormComplainantPhone('')
     setFormComplainantEmail('')
     setFormError(null)
+  }
+
+  const openDetail = (complaint: Complaint) => {
+    setDetailComplaint(complaint)
+    setDetailOpen(true)
   }
 
   const filtered = complaints.filter(
@@ -381,20 +392,21 @@ export default function ComplaintsPage() {
                   <TableHead>Opérateur</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead>Plaignant</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 8 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : filtered.length > 0 ? (
                   filtered.map((complaint) => (
-                    <TableRow key={complaint.id}>
+                    <TableRow key={complaint.id} className="cursor-pointer" onClick={() => openDetail(complaint)}>
                       <TableCell>
                         <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
                           {complaint.reference}
@@ -422,11 +434,16 @@ export default function ComplaintsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>{complaint.complainantName || '—'}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); openDetail(complaint) }}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                       Aucune plainte trouvée
                     </TableCell>
                   </TableRow>
@@ -436,6 +453,87 @@ export default function ComplaintsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detail dialog with documents */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          {detailComplaint && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <code className="rounded bg-muted px-2 py-0.5 text-sm font-medium">
+                    {detailComplaint.reference}
+                  </code>
+                  {detailComplaint.title}
+                </DialogTitle>
+                <DialogDescription>Détails de la plainte</DialogDescription>
+              </DialogHeader>
+
+              <Tabs defaultValue="details" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="details">Détails</TabsTrigger>
+                  <TabsTrigger value="documents">Documents</TabsTrigger>
+                </TabsList>
+                <TabsContent value="details" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Catégorie</p>
+                      <p className="text-sm font-medium">{categoryLabels[detailComplaint.category] || detailComplaint.category}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Priorité</p>
+                      <Badge
+                        variant={priorityMap[detailComplaint.priority]?.variant}
+                        className={priorityMap[detailComplaint.priority]?.className}
+                      >
+                        {priorityMap[detailComplaint.priority]?.label || detailComplaint.priority}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Statut</p>
+                      <Badge
+                        variant={statusMap[detailComplaint.status]?.variant}
+                        className={statusMap[detailComplaint.status]?.className}
+                      >
+                        {statusMap[detailComplaint.status]?.label || detailComplaint.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Opérateur</p>
+                      <p className="text-sm font-medium">{detailComplaint.operator?.name || '—'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Description</p>
+                    <p className="text-sm mt-1">{detailComplaint.description}</p>
+                  </div>
+                  {(detailComplaint.complainantName || detailComplaint.complainantPhone || detailComplaint.complainantEmail) && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Plaignant</p>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div><p className="text-sm font-medium">{detailComplaint.complainantName || '—'}</p></div>
+                        <div><p className="text-sm font-medium">{detailComplaint.complainantPhone || '—'}</p></div>
+                        <div><p className="text-sm font-medium">{detailComplaint.complainantEmail || '—'}</p></div>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm text-muted-foreground">Date de création</p>
+                    <p className="text-sm font-medium">{new Date(detailComplaint.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                </TabsContent>
+                <TabsContent value="documents" className="mt-4">
+                  <FileUpload
+                    entityId={detailComplaint.id}
+                    entityType="complaint"
+                    category="piece_jointe"
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

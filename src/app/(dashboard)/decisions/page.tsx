@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -14,8 +15,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ScrollText, Search } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ScrollText, Search, Eye } from 'lucide-react'
 import { apiClient, ApiError } from '@/lib/api-client'
+import { FileUpload } from '@/components/file-upload'
 
 interface DecidedByUser {
   id: string
@@ -60,6 +69,8 @@ export default function DecisionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [detailDecision, setDetailDecision] = useState<Decision | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const loadDecisions = useCallback(async () => {
     try {
@@ -87,6 +98,11 @@ export default function DecisionsPage() {
   useEffect(() => {
     loadDecisions()
   }, [loadDecisions])
+
+  const openDetail = (decision: Decision) => {
+    setDetailDecision(decision)
+    setDetailOpen(true)
+  }
 
   const filtered = decisions.filter(
     (d) =>
@@ -179,20 +195,21 @@ export default function DecisionsPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead>Décidé par</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 5 }).map((_, j) => (
+                      {Array.from({ length: 6 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : filtered.length > 0 ? (
                   filtered.map((decision) => (
-                    <TableRow key={decision.id}>
+                    <TableRow key={decision.id} className="cursor-pointer" onClick={() => openDetail(decision)}>
                       <TableCell>
                         <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
                           {decision.reference}
@@ -218,11 +235,16 @@ export default function DecisionsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>{decision.decidedBy?.name || '—'}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); openDetail(decision) }}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                       Aucune décision trouvée
                     </TableCell>
                   </TableRow>
@@ -232,6 +254,75 @@ export default function DecisionsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Detail dialog with documents */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          {detailDecision && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <code className="rounded bg-muted px-2 py-0.5 text-sm font-medium">
+                    {detailDecision.reference}
+                  </code>
+                  {detailDecision.title}
+                </DialogTitle>
+                <DialogDescription>Détails de la décision</DialogDescription>
+              </DialogHeader>
+
+              <Tabs defaultValue="details" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="details">Détails</TabsTrigger>
+                  <TabsTrigger value="documents">Documents</TabsTrigger>
+                </TabsList>
+                <TabsContent value="details" className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Type</p>
+                      <Badge variant={typeMap[detailDecision.type]?.variant} className={typeMap[detailDecision.type]?.className}>
+                        {typeMap[detailDecision.type]?.label || detailDecision.type}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Statut</p>
+                      <Badge variant={statusMap[detailDecision.status]?.variant} className={statusMap[detailDecision.status]?.className}>
+                        {statusMap[detailDecision.status]?.label || detailDecision.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Décidé par</p>
+                      <p className="text-sm font-medium">{detailDecision.decidedBy?.name || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Date de décision</p>
+                      <p className="text-sm font-medium">
+                        {detailDecision.decidedAt ? new Date(detailDecision.decidedAt).toLocaleDateString('fr-FR') : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Description</p>
+                    <p className="text-sm mt-1">{detailDecision.description}</p>
+                  </div>
+                  {detailDecision.publishedAt && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Date de publication</p>
+                      <p className="text-sm font-medium">{new Date(detailDecision.publishedAt).toLocaleDateString('fr-FR')}</p>
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="documents" className="mt-4">
+                  <FileUpload
+                    entityId={detailDecision.id}
+                    entityType="decision"
+                    category="decision"
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
