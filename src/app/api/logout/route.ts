@@ -1,29 +1,42 @@
 import { NextResponse } from "next/server";
+import { apiHandler } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 
-export async function POST() {
-  const response = NextResponse.json({ message: "Deconnecte avec succes" });
+export const POST = apiHandler({
+  handler: async () => {
+    const response = NextResponse.json({
+      success: true,
+      data: { message: "Deconnecte avec succes" },
+    });
 
-  response.cookies.set("arpt-session", "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 0,
-    path: "/",
-  });
+    response.cookies.set("arpt-session", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
 
-  return response;
-}
+    logger.info("USER_LOGOUT");
+    return response;
+  },
+});
 
-export async function GET() {
-  const response = NextResponse.json({ message: "Deconnecte avec succes" });
+export const GET = apiHandler({
+  handler: async () => {
+    const response = NextResponse.json({
+      success: true,
+      data: { message: "Deconnecte avec succes" },
+    });
 
-  response.cookies.set("arpt-session", "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 0,
-    path: "/",
-  });
+    response.cookies.set("arpt-session", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
 
-  return response;
-}
+    return response;
+  },
+});

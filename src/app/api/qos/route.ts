@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { createQosReportSchema, paginationSchema } from "@/lib/validations";
+import { apiHandler } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "20", 10);
+export const GET = apiHandler({
+  auth: true,
+  querySchema: paginationSchema,
+  handler: async (req, { query }) => {
+    const { page, limit } = (query as Record<string, unknown>) || {};
+    const { searchParams } = new URL(req.url);
     const operatorId = searchParams.get("operatorId");
     const period = searchParams.get("period");
     const status = searchParams.get("status");
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (operatorId) where.operatorId = operatorId;
     if (period) where.period = period;
     if (status) where.status = status;
@@ -19,65 +23,56 @@ export async function GET(request: NextRequest) {
       db.qosReport.findMany({
         where,
         include: { operator: { select: { id: true, name: true, code: true } } },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: ((page as number) - 1) * (limit as number),
+        take: limit as number,
         orderBy: { createdAt: "desc" },
       }),
       db.qosReport.count({ where }),
     ]);
 
     return NextResponse.json({
-      reports,
+      success: true,
+      data: reports,
       pagination: {
-        page,
-        limit,
+        page: page as number,
+        limit: limit as number,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / (limit as number)),
       },
     });
-  } catch (error) {
-    console.error("Error fetching QoS reports:", error);
-    return NextResponse.json(
-      { error: "Erreur lors de la recuperation des rapports QoS" },
-      { status: 500 }
-    );
-  }
-}
+  },
+});
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-
-    if (!body.operatorId || !body.period) {
-      return NextResponse.json(
-        { error: "Operateur et periode requis" },
-        { status: 400 }
-      );
-    }
-
+export const POST = apiHandler({
+  auth: true,
+  rbac: ["super_admin", "admin", "agent", "directeur"],
+  bodySchema: createQosReportSchema,
+  handler: async (req, { body, user }) => {
     const report = await db.qosReport.create({
       data: {
-        operatorId: body.operatorId,
-        period: body.period,
-        region: body.region,
-        callSuccessRate: body.callSuccessRate,
-        callSetupTime: body.callSetupTime,
-        dropRate: body.dropRate,
-        handoverSuccessRate: body.handoverSuccessRate,
-        smsSuccessRate: body.smsSuccessRate,
-        dataThroughput: body.dataThroughput,
-        latency: body.latency,
-        overallScore: body.overallScore,
-        status: body.status || "draft",
+        operatorId: body!.operatorId,
+        period: body!.period,
+        region: body!.region || null,
+        callSuccessRate: body!.callSuccessRate ?? null,
+        callSetupTime: body!.callSetupTime ?? null,
+        dropRate: body!.dropRate ?? null,
+        handoverSuccessRate: body!.handoverSuccessRate ?? null,
+        smsSuccessRate: body!.smsSuccessRate ?? null,
+        dataThroughput: body!.dataThroughput ?? null,
+        latency: body!.latency ?? null,
+        overallScore: body!.overallScore ?? null,
+        createdById: user!.id,
       },
     });
 
-    return NextResponse.json({ report }, { status: 201 });
-  } catch (error) {
-    console.error("Error creating QoS report:", error);
+    logger.business("CREATE_QOS_REPORT", "QosReport", report.id, {
+      operatorId: report.operatorId,
+      period: report.period,
+    });
+
     return NextResponse.json(
-      { error: "Erreur lors de la creation du rapport QoS" },
-      { status: 500 }
+      { success: true, data: report },
+      { status: 201 }
     );
-  }
-}
+  },
+});

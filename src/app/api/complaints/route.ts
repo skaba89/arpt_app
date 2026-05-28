@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { createComplaintSchema, paginationSchema } from "@/lib/validations";
+import { apiHandler } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "20", 10);
+export const GET = apiHandler({
+  auth: true,
+  querySchema: paginationSchema,
+  handler: async (req, { query }) => {
+    const { page, limit } = (query as Record<string, unknown>) || {};
+    const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const operatorId = searchParams.get("operatorId");
     const category = searchParams.get("category");
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (operatorId) where.operatorId = operatorId;
     if (category) where.category = category;
@@ -21,42 +25,30 @@ export async function GET(request: NextRequest) {
         include: {
           operator: { select: { id: true, name: true, code: true } },
         },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: ((page as number) - 1) * (limit as number),
+        take: limit as number,
         orderBy: { createdAt: "desc" },
       }),
       db.complaint.count({ where }),
     ]);
 
     return NextResponse.json({
-      complaints,
+      success: true,
+      data: complaints,
       pagination: {
-        page,
-        limit,
+        page: page as number,
+        limit: limit as number,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / (limit as number)),
       },
     });
-  } catch (error) {
-    console.error("Error fetching complaints:", error);
-    return NextResponse.json(
-      { error: "Erreur lors de la recuperation des plaintes" },
-      { status: 500 }
-    );
-  }
-}
+  },
+});
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-
-    if (!body.title || !body.description) {
-      return NextResponse.json(
-        { error: "Titre et description requis" },
-        { status: 400 }
-      );
-    }
-
+export const POST = apiHandler({
+  auth: true,
+  bodySchema: createComplaintSchema,
+  handler: async (req, { body, user }) => {
     // Generate reference number
     const year = new Date().getFullYear();
     const count = await db.complaint.count();
@@ -65,23 +57,26 @@ export async function POST(request: NextRequest) {
     const complaint = await db.complaint.create({
       data: {
         reference,
-        title: body.title,
-        description: body.description,
-        category: body.category || "autre",
-        priority: body.priority || "medium",
-        operatorId: body.operatorId,
-        complainantName: body.complainantName,
-        complainantPhone: body.complainantPhone,
-        complainantEmail: body.complainantEmail,
+        title: body!.title,
+        description: body!.description,
+        category: body!.category,
+        priority: body!.priority || "medium",
+        operatorId: body!.operatorId || null,
+        complainantName: body!.complainantName || null,
+        complainantPhone: body!.complainantPhone || null,
+        complainantEmail: body!.complainantEmail || null,
+        createdById: user!.id,
       },
     });
 
-    return NextResponse.json({ complaint }, { status: 201 });
-  } catch (error) {
-    console.error("Error creating complaint:", error);
+    logger.business("CREATE_COMPLAINT", "Complaint", complaint.id, {
+      reference: complaint.reference,
+      category: complaint.category,
+    });
+
     return NextResponse.json(
-      { error: "Erreur lors de la creation de la plainte" },
-      { status: 500 }
+      { success: true, data: complaint },
+      { status: 201 }
     );
-  }
-}
+  },
+});

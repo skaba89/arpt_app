@@ -1,80 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { createOperatorSchema, paginationSchema } from "@/lib/validations";
+import { apiHandler } from "@/lib/api-handler";
+import { logger } from "@/lib/logger";
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "20", 10);
+export const GET = apiHandler({
+  auth: true,
+  querySchema: paginationSchema,
+  handler: async (req, { query }) => {
+    const { page, limit } = (query as Record<string, unknown>) || {};
+    const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const type = searchParams.get("type");
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (type) where.type = type;
 
     const [operators, total] = await Promise.all([
       db.operator.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: ((page as number) - 1) * (limit as number),
+        take: limit as number,
         orderBy: { createdAt: "desc" },
       }),
       db.operator.count({ where }),
     ]);
 
     return NextResponse.json({
-      operators,
+      success: true,
+      data: operators,
       pagination: {
-        page,
-        limit,
+        page: page as number,
+        limit: limit as number,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / (limit as number)),
       },
     });
-  } catch (error) {
-    console.error("Error fetching operators:", error);
-    return NextResponse.json(
-      { error: "Erreur lors de la recuperation des operateurs" },
-      { status: 500 }
-    );
-  }
-}
+  },
+});
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { name, code, type, contactEmail, contactPhone } = body;
-
-    if (!name || !code) {
-      return NextResponse.json(
-        { error: "Nom et code requis" },
-        { status: 400 }
-      );
-    }
-
+export const POST = apiHandler({
+  auth: true,
+  rbac: ["super_admin", "admin", "dg"],
+  bodySchema: createOperatorSchema,
+  handler: async (req, { body, user }) => {
     const operator = await db.operator.create({
       data: {
-        name,
-        code: code.toUpperCase(),
-        type: type || "mobile",
-        contactEmail,
-        contactPhone,
+        name: body!.name,
+        code: body!.code.toUpperCase(),
+        type: body!.type || "mobile",
+        status: body!.status || "active",
+        contactEmail: body!.contactEmail || null,
+        contactPhone: body!.contactPhone || null,
+        createdById: user!.id,
       },
     });
 
-    return NextResponse.json({ operator }, { status: 201 });
-  } catch (error: any) {
-    if (error.code === "P2002") {
-      return NextResponse.json(
-        { error: "Un operateur avec ce nom ou code existe deja" },
-        { status: 409 }
-      );
-    }
-    console.error("Error creating operator:", error);
+    logger.business("CREATE_OPERATOR", "Operator", operator.id, { name: operator.name, code: operator.code });
+
     return NextResponse.json(
-      { error: "Erreur lors de la creation de l'operateur" },
-      { status: 500 }
+      { success: true, data: operator },
+      { status: 201 }
     );
-  }
-}
+  },
+});
